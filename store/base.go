@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jarrancarr/ChexxServer/match"
-	"github.com/jarrancarr/ChexxServer/user"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/joho/godotenv"
@@ -38,7 +36,7 @@ func init() {
 
 	db = conn
 	//db.Debug().AutoMigrate(&Account{}, &Comment{}, &Match{}, &Message{}, &Team{}, &Kingdom{}, &AI{}) //Database migration
-	db.Debug().AutoMigrate(&Test{}, &match.Match{}, &user.User{}) //Database migration
+	db.Debug().AutoMigrate(&Test{}, &Match{}, &User{}) //Database migration
 }
 
 //returns a handle to the DB object
