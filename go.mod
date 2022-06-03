@@ -10,7 +10,10 @@ require (
 	golang.org/x/crypto v0.0.0-20191205180655-e7c4368fe9dd
 )
 
-require github.com/rs/cors v1.8.2 // indirect
+require (
+	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
+	golang.org/x/text v0.3.0 // indirect
+)
 
 require (
 	github.com/felixge/httpsnoop v1.0.1 // indirect

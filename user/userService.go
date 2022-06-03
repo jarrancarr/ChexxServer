@@ -17,12 +17,7 @@ import (
 )
 
 func FindUser(r *http.Request) (*store.User, error) {
-	var data map[string]interface{}
-	err := json.NewDecoder(r.Body).Decode(&data) //decode the request body into struct and failed if any error occur
-	if err != nil {
-		return nil, errors.New("problem getting token from json")
-	}
-	token := fmt.Sprintf("%v", data["token"])
+	token := r.Header.Get("Authorization")
 	fmt.Println(">>>" + token + "<<<")
 	if store.Sessions()[token] == nil {
 		return nil, errors.New("No User by that ID found")
