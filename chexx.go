@@ -36,15 +36,30 @@ func main() {
 	r.HandleFunc("/match/getMatches", match.Matches)
 	r.HandleFunc("/match/save", match.SaveMatch)
 	r.HandleFunc("/match/list", match.ListMatches)
+	r.HandleFunc("/match/load/{id}", match.LoadMatch)
 	http.Handle("/", r)
-
 	r.Use(user.JwtAuthentication)
 
-	//log.Fatal(http.ListenAndServe(":8000", r))
+	router := handlers.LoggingHandler(os.Stdout, handlers.CORS(
+		handlers.AllowedMethods([]string{"POST", "OPTIONS", "GET"}),
+		handlers.AllowedOrigins([]string{"*"}),
+		handlers.AllowedHeaders([]string{"Accept", "Accept-Language", "Authorization", "Content-Type", "Content-Language", "Origin", "X-Requested-With"}))(r))
 
-	log.Fatal(http.ListenAndServe(":8001",
-		handlers.LoggingHandler(os.Stdout, handlers.CORS(
-			handlers.AllowedMethods([]string{"POST", "OPTIONS", "GET"}),
-			handlers.AllowedOrigins([]string{"*"}),
-			handlers.AllowedHeaders([]string{"Accept", "Accept-Language", "Authorization", "Content-Type", "Content-Language", "Origin", "X-Requested-With"}))(r))))
+	log.Fatal(http.ListenAndServe(":8000", router))
+
+	// log.Fatal(http.ListenAndServeTLS(":443", "server.crt", "server.key", router))
+
+	// mgr := autocert.Manager{
+	// 	Cache:      autocert.DirCache("certCache"),
+	// 	Prompt:     autocert.AcceptTOS,
+	// 	HostPolicy: autocert.HostWhitelist("chexx.org", "www.chexx.org"),
+	// }
+
+	// server := &http.Server{
+	// 	Addr:      ":https",
+	// 	Handler:   router,
+	// 	TLSConfig: mgr.TLSConfig(),
+	// }
+
+	// server.ListenAndServeTLS("", "")
 }

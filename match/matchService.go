@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
+	"github.com/gorilla/mux"
 	"github.com/jarrancarr/ChexxServer/store"
 	"github.com/jarrancarr/ChexxServer/user"
 	"github.com/jarrancarr/ChexxServer/utils"
@@ -48,6 +50,22 @@ func SaveMatch(w http.ResponseWriter, r *http.Request) {
 	utils.Respond(w, resp)
 }
 
+func LoadMatch(w http.ResponseWriter, r *http.Request) { // {id:0, name:'offline', white:{pieces:['Rd54', 'Rd5', 'Rc52', 'Nd53', 'Nd51', 'Nc33', 'Bc53', 'Bc55', 'Bd52', 'Qd41', 'Kc44', 'Id31', 'Ed4', 'Pd55', 'Pd44', 'Pd33', 'Pd21', 'Pc22', 'Pc31', 'Pc41', 'Pc51', 'Sd43', 'Sd32', 'Sd2', 'Sc32', 'Sc42', 'Ad42', 'Ad3', 'Ac43'], time:300}, black:{pieces:['Ra5', 'Rf52', 'Ra54', 'Nf53', 'Nf55', 'Na31', 'Ba53', 'Ba51', 'Bf54', 'Qf44', 'Ka41', 'If33', 'Ea4', 'Pf51', 'Pf41', 'Pf31', 'Pf22', 'Pa21', 'Pa33', 'Pa44', 'Pa55', 'Sf42', 'Sf32', 'Sa2', 'Sa32', 'Sa43', 'Af43', 'Aa3', 'Aa42'], time:300}, log:[], type:{game:300, move:15}});
+	params := mux.Vars(r)
+	idStr := params["id"]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Match ID not found."))
+		return
+	}
+	m := store.GetMatch(uint(id))
+
+	resp := utils.Message(true, "Found match")
+	resp["match"] = m
+
+	utils.Respond(w, resp)
+}
+
 func ListMatches(w http.ResponseWriter, r *http.Request) {
 
 	user, _ := user.FindUser(r)
@@ -66,7 +84,7 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 
 	matchesData := make([][]string, result.RowsAffected)
 	for m := range matches {
-		matchesData[m] = []string{"" + matches[m].Title + "", ""}
+		matchesData[m] = []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""}
 	}
 	resp := utils.Message(true, "Found matches")
 	resp["matches"] = matchesData

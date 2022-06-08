@@ -80,7 +80,7 @@ func GetMatch(id uint) *Match {
 
 	white := strings.Split(m.WhiteArmy, "|")
 	whiteClock, _ := strconv.Atoi(white[1])
-	m.Black = Army{UserId: m.WhitePlayerId, Pieces: strings.Split(white[0], " "), Time: whiteClock}
+	m.White = Army{UserId: m.WhitePlayerId, Pieces: strings.Split(white[0], " "), Time: whiteClock}
 
 	return m
 }
