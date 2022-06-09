@@ -137,7 +137,6 @@ func Login(userId, password string) map[string]interface{} {
 
 	// convertProps(account)
 
-	fmt.Printf("User %s logged in\n", user.Name)
 	store.Sessions()[user.Token] = &store.Session{User: user, NumNewMoves: 0}
 
 	resp := utils.Message(true, "Logged In")
@@ -161,11 +160,6 @@ func RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 	password := user.Password
 	resp := user.Create()
-
-	fmt.Println("-------------RegisterUser-------------")
-	fmt.Printf("%v\n", user.UserId)
-	fmt.Printf("%v\n", password)
-	fmt.Println("-------------RegisterUser-------------")
 
 	if resp["status"] == true {
 		resp := Login(user.UserId, password)

@@ -37,6 +37,8 @@ func main() {
 	r.HandleFunc("/match/save", match.SaveMatch)
 	r.HandleFunc("/match/list", match.ListMatches)
 	r.HandleFunc("/match/load/{id}", match.LoadMatch)
+	r.HandleFunc("/match/challenge", match.CreateMatch)
+
 	http.Handle("/", r)
 	r.Use(user.JwtAuthentication)
 

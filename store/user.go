@@ -35,7 +35,7 @@ type User struct {
 	Property      map[string]string `json:"property" gorm:"-"`
 	SignedRequest string            `json:"signedRequest"`
 	UserId        string            `json:"userid"`
-	Rank          int32             `json:"rank"`
+	Rank          uint32            `json:"rank"`
 	About         About             `json:"about"`
 
 	// Picture       []uint8 `json:"picture"`

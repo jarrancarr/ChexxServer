@@ -19,6 +19,8 @@ type Type struct {
 	Name      string `json:"name"`
 	GameClock uint32 `json:"game"`
 	MoveClock uint32 `json:"move"`
+	Status    string `json:"status`
+	Rating    uint32 `json:"rating"`
 }
 type Match struct {
 	gorm.Model
@@ -32,6 +34,7 @@ type Match struct {
 	Log           []string `json:"log" gorm:"-"`
 	Logs          string   `json:"-"`
 	Blog          string   `json:"blog"`
+	Notes         string   `json:"notes"`
 	Game          Type     `gorm:"embedded"`
 }
 
@@ -64,6 +67,27 @@ func (m *Match) Create() map[string]interface{} {
 
 	response := utils.Message(true, "Match created")
 	response["id"] = m.ID
+	return response
+}
+func (m *Match) Update() map[string]interface{} {
+
+	if resp, ok := m.Validate(); !ok {
+		return resp
+	}
+
+	m.Logs = strings.Join(m.Log, " ")
+	m.BlackArmy = strings.Join(m.Black.Pieces, " ") + "|" + fmt.Sprintf("%d", m.Black.Time)
+	m.WhiteArmy = strings.Join(m.White.Pieces, " ") + "|" + fmt.Sprintf("%d", m.White.Time)
+	m.BlackPlayerId = m.Black.UserId
+	m.WhitePlayerId = m.White.UserId
+
+	GetDB().Save(m)
+
+	if m.ID <= 0 {
+		return utils.Message(false, "Failed to create message, connection error.")
+	}
+
+	response := utils.Message(true, "Match updated")
 	return response
 }
 
