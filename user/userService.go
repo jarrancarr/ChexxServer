@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/gorilla/mux"
 	"github.com/jarrancarr/ChexxServer/store"
 	"github.com/jarrancarr/ChexxServer/utils"
 	"github.com/jinzhu/gorm"
@@ -18,7 +20,7 @@ import (
 
 func FindUser(r *http.Request) (*store.User, error) {
 	token := r.Header.Get("Authorization")
-	fmt.Println(">>>" + token + "<<<")
+	// fmt.Println(">>>" + token + "<<<")
 	if store.Sessions()[token] == nil {
 		return nil, errors.New("No User by that ID found")
 	}
@@ -121,7 +123,7 @@ func Login(userId, password string) map[string]interface{} {
 		return utils.Message(false, "Connection error. Please retry")
 	}
 
-	fmt.Println(user)
+	// fmt.Println(user)
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
@@ -142,6 +144,29 @@ func Login(userId, password string) map[string]interface{} {
 	resp := utils.Message(true, "Logged In")
 	resp["user"] = user
 	return resp
+}
+
+func UserInfo(w http.ResponseWriter, r *http.Request) {
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+
+	params := mux.Vars(r)
+	idStr := params["id"]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Match ID not found."))
+		return
+	}
+	u := store.GetUser(uint(id))
+
+	resp := utils.Message(true, "Found match")
+	resp["opponent"] = u
+
+	utils.Respond(w, resp)
 }
 
 func RegisterUser(w http.ResponseWriter, r *http.Request) {
@@ -173,8 +198,8 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		notAuth := []string{"/tutor", "/user"} //List of endpoints that doesn't require auth
-		requestPath := r.URL.Path              //current request path
+		notAuth := []string{"/tutor", "/user", "/match/cpu"} //List of endpoints that doesn't require auth
+		requestPath := r.URL.Path                            //current request path
 
 		//check if request does not need authentication, serve the request if it doesn't need it
 		for _, value := range notAuth {
