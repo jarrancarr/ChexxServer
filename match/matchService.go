@@ -68,6 +68,9 @@ func AIMove(w http.ResponseWriter, r *http.Request) {
 	user, _ := user.FindUser(r)
 
 	if user == nil {
+		if level > 3 {
+			level = 3
+		}
 		move := match.AI(9, level, nil)
 
 		resp := utils.Message(true, "Checkmate or something.")
@@ -77,7 +80,7 @@ func AIMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	move := match.AI(9, 5, nil)
+	move := match.AI(9, level, nil)
 
 	resp := utils.Message(true, "Checkmate or something.")
 	resp["move"] = move.LastMove

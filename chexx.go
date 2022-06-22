@@ -17,6 +17,8 @@ import (
 
 var test = false
 
+//var test = true
+
 func main() {
 	utils.Init()
 	if test {
@@ -29,23 +31,25 @@ func main() {
 		//                             Nd53    Nd51    Bc53    Bc55    Bd52    Kc54    Pd55    Pd44    Pe21    Pe    P*    Pc31    Pc41    Pc51    Sd43    Se1    Sc1    Sc42    Ad42    Ae2    Ac4
 		// 							   Ka52    If2    Ec2    Pf51    Pf41    Pe22    Pf    Pa33    Pa44    Pa55    Sf42    Sf1    Sa    Sb1    Sa43    Af43    Aa3    Aa42
 
-		match.White.Pieces = []string{"Bc53", "Bc55", "Kc54", "Ac43"}
-		match.Black.Pieces = []string{"Ka52", "Ea11"}
-		//match.White.Pieces = []string{"Kc44", "Qd41", "Sd32"}
-		//match.Black.Pieces = []string{"Ka41", "Pf21", "Bc41"}
-		match.Log = []string{"blank"} // to make this blacks move
+		match.White.Pieces = []string{"Kd5", "Bc55"}
+		match.Black.Pieces = []string{"Ka52", "Rc5", "Nd32"} // , "Bb32"
+		//match.White.Pieces = []string{"Pd55", "Pd44", "Pd33"}
+		//match.Black.Pieces = []string{"Pf21"}
+		//match.Log = []string{"blank"} // to make this blacks move
 		// match.Move("a2~a1")
 		// match.TestAttacks("f5")
 		// match.Show("f5")
-		// match.Analyse()
-		// match.Examine()
 		for i := 0; i < 1; i++ {
-			best := match.AI(4, 2, nil)
-			match.Move(best.LastMove)
+			best := match.AI(4, 0, nil)
+			if best != nil {
+				match.Move(best.LastMove)
+			} else {
+				fmt.Println("No move returned")
+			}
 		}
 		fmt.Println("move: " + match.LastMove)
-		// match.Analyse()
-		//match.Examine()
+		match.Analyse()
+		match.Examine()
 		os.Exit(0)
 	}
 	r := mux.NewRouter()
