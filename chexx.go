@@ -31,22 +31,22 @@ func main() {
 		//                             Nd53    Nd51    Bc53    Bc55    Bd52    Kc54    Pd55    Pd44    Pe21    Pe    P*    Pc31    Pc41    Pc51    Sd43    Se1    Sc1    Sc42    Ad42    Ae2    Ac4
 		// 							   Ka52    If2    Ec2    Pf51    Pf41    Pe22    Pf    Pa33    Pa44    Pa55    Sf42    Sf1    Sa    Sb1    Sa43    Af43    Aa3    Aa42
 
-		match.White.Pieces = []string{"Kd5", "Bc55"}
-		match.Black.Pieces = []string{"Ka52", "Rc5", "Nd32"} // , "Bb32"
+		match.White.Pieces = []string{"Kd5", "Pc32"}
+		match.Black.Pieces = []string{"Ka52"} // , "Bb32"
 		//match.White.Pieces = []string{"Pd55", "Pd44", "Pd33"}
 		//match.Black.Pieces = []string{"Pf21"}
 		//match.Log = []string{"blank"} // to make this blacks move
-		// match.Move("a2~a1")
+		match.Move("Pc32~c21")
 		// match.TestAttacks("f5")
 		// match.Show("f5")
-		for i := 0; i < 1; i++ {
-			best := match.AI(4, 0, nil)
-			if best != nil {
-				match.Move(best.LastMove)
-			} else {
-				fmt.Println("No move returned")
-			}
-		}
+		// for i := 0; i < 1; i++ {
+		// 	best := match.AI(4, 0, nil)
+		// 	if best != nil {
+		// 		match.Move(best.LastMove)
+		// 	} else {
+		// 		fmt.Println("No move returned")
+		// 	}
+		// }
 		fmt.Println("move: " + match.LastMove)
 		match.Analyse()
 		match.Examine()

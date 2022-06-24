@@ -61,7 +61,6 @@ func (m *Match) Validate() (map[string]interface{}, bool) {
 
 	return utils.Message(false, "Requirement passed"), true
 }
-
 func (m *Match) Create() map[string]interface{} {
 
 	if resp, ok := m.Validate(); !ok {
@@ -109,7 +108,6 @@ func (m *Match) Update() map[string]interface{} {
 	response := utils.Message(true, "Match updated")
 	return response
 }
-
 func GetMatch(id uint) *Match {
 
 	m := &Match{}
@@ -127,7 +125,6 @@ func GetMatch(id uint) *Match {
 
 	return m
 }
-
 func (m *Match) remove(xy int, isWhite bool) {
 	pos := utils.Hex[xy]
 	if isWhite {
@@ -155,8 +152,9 @@ func (m *Match) remove(xy int, isWhite bool) {
 func (m *Match) Move(move string) {
 	// fmt.Printf("...Move %s\n", move)
 	m.LastMove = move
-	pos := strings.Split(move, "~")
-	if len(pos) == 2 {
+	fromTo := strings.Split(move, "~")
+	if len(fromTo) == 2 {
+		pos := []string{strings.Trim(fromTo[0], "KQIERANBPS"), strings.Trim(fromTo[1], "KQIERANBPS")}
 		repl := -1
 		for p := range m.White.Pieces {
 			if m.White.Pieces[p][1:] == pos[0] {
@@ -187,7 +185,7 @@ func (m *Match) Move(move string) {
 				}
 			}
 			if repl > -1 {
-				if m.Black.Pieces[repl][1:] == pos[0] {
+				if m.Black.Pieces[repl] == pos[0] {
 					m.Black.Pieces[repl] = m.Black.Pieces[repl][:1] + pos[1]
 				}
 				// now remove white piece
@@ -207,6 +205,38 @@ func (m *Match) Move(move string) {
 		}
 	} else { // special moves
 
+		pos := strings.Trim(fromTo[0][1:], "KQIERANB")
+		repl := -1
+		for p := range m.White.Pieces {
+			if m.White.Pieces[p][1:] == pos {
+				repl = p
+			}
+		}
+		if repl > -1 {
+			if m.White.Pieces[repl][1:] == pos {
+				if m.White.Pieces[repl][0] == 'P' {
+					m.White.Pieces[repl] = "S" + pos
+				} else {
+					m.White.Pieces[repl] = "P" + pos
+				}
+			}
+		} else {
+			for p := range m.Black.Pieces {
+				if m.Black.Pieces[p][1:] == pos {
+					repl = p
+				}
+			}
+			if repl > -1 {
+				if m.Black.Pieces[repl][1:] == pos {
+					if m.Black.Pieces[repl][0] == 'P' {
+						m.Black.Pieces[repl] = "S" + pos
+					} else {
+						m.Black.Pieces[repl] = "P" + pos
+					}
+				}
+			}
+
+		}
 	}
 	// TODO: still have to do special moves
 
@@ -316,14 +346,17 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 				testMatch.LastMove = "black turn"
 				if m.board.Occupant[perp][0] == 'b' {
 					testMatch.LastMove = "black move"
+					//fmt.Printf("black move: %d~%d\n", perp, assaults[attack])
 					// testMatch := Match{White: Army{Pieces: []string{}}, Black: Army{Pieces: []string{}}}
 					testMatch.clone(m)
 					if assaults[attack] < 0 { // formation switch arms
 						left := -assaults[attack] / 100000
 						right := (-assaults[attack] - left*100000) / 10000
-						testMatch.switchArmsFlank(perp, left, false)
-						testMatch.switchArmsFlank(perp, right, true)
-						testMatch.LastMove = "#########"[:left] + utils.Hex[perp] + "#########"[:right]
+						if left > 0 && right > 0 {
+							testMatch.switchArmsFlank(perp, left, false)
+							testMatch.switchArmsFlank(perp, right, true)
+							testMatch.LastMove = "#########"[:left] + utils.Hex[perp] + "#########"[:right]
+						}
 					} else if assaults[attack] < 10000 {
 						sa := -1
 						if perp == assaults[attack] { // switch arms
@@ -339,6 +372,7 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 									testMatch.Black.Pieces[sa] = "P" + utils.Hex[perp]
 								}
 							}
+							testMatch.LastMove = utils.Hex[perp]
 						} else { // normal move
 							testMove := utils.Hex[perp] + "~" + utils.Hex[assaults[attack]]
 							testMatch.Move(testMove)
@@ -780,8 +814,10 @@ func (match *Match) Analyse() {
 			for left := 0; leftSupport > 0; left += 1 {
 				rightSupport := sa
 				for right := 0; rightSupport > 0; right += 1 {
-					match.board.Moves[sa] = append(match.board.Moves[sa], -(sa + left*100000 + right*10000))
-					match.board.MoveCount += 1
+					if left > 0 && right > 0 {
+						match.board.Moves[sa] = append(match.board.Moves[sa], -(sa + left*100000 + right*10000))
+						match.board.MoveCount += 1
+					}
 					rightSupport = support(match.board.Occupant, switchArms, rightSupport+101, 'P') + support(match.board.Occupant, switchArms, rightSupport+103, 'S')
 				}
 				leftSupport = support(match.board.Occupant, switchArms, leftSupport-99, 'P') + support(match.board.Occupant, switchArms, rightSupport-97, 'S')
@@ -831,9 +867,11 @@ func (match *Match) Analyse() {
 			for left := 0; leftSupport > 0; left += 1 {
 				rightSupport := sa
 				for right := 0; rightSupport > 0; right += 1 {
-					//fmt.Printf("Adding formation switch arms move %d\n", sa+left*100000+right*10000)
-					match.board.Moves[sa] = append(match.board.Moves[sa], -(sa + left*100000 + right*10000))
-					match.board.MoveCount += 1
+					if left > 0 && right > 0 {
+						//fmt.Printf("Adding formation switch arms move %d\n", sa+left*100000+right*10000)
+						match.board.Moves[sa] = append(match.board.Moves[sa], -(sa + left*100000 + right*10000))
+						match.board.MoveCount += 1
+					}
 					rightSupport = support(match.board.Occupant, switchArms, rightSupport+99, 'P') + support(match.board.Occupant, switchArms, rightSupport+97, 'S')
 				}
 				leftSupport = support(match.board.Occupant, switchArms, leftSupport-101, 'P') + support(match.board.Occupant, switchArms, rightSupport-103, 'S')
@@ -1047,6 +1085,8 @@ func (match *Match) TextBoard(dat string, hex bool) {
 func (match *Match) Examine() {
 	fmt.Printf("\nAttacks: %d     Attacked: %d     Moves: %d\n", len(match.board.Attacks), len(match.board.Attacked), len(match.board.Moves))
 	fmt.Printf("Score: %d\n", match.board.Score)
+	fmt.Printf("White: %v \n", match.White.Pieces)
+	fmt.Printf("Black: %v \n", match.Black.Pieces)
 	fmt.Printf("Log: %v\n", match.Log)
 	// fmt.Printf("Moves: %v\n", match.board.Moves)
 

@@ -73,7 +73,7 @@ func AIMove(w http.ResponseWriter, r *http.Request) {
 		}
 		move := match.AI(9, level, nil)
 
-		resp := utils.Message(true, "Checkmate or something.")
+		resp := utils.Message(true, "OK")
 		resp["move"] = move.LastMove
 		utils.Respond(w, resp)
 		//utils.Respond(w, utils.Message(false, "User not found."))
@@ -209,6 +209,7 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 	m := store.GetMatch(uint(id))
 
+	fmt.Printf("match found")
 	user, _ := user.FindUser(r)
 
 	if user == nil {
@@ -228,6 +229,7 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	fmt.Printf("decoding")
 	var jsonData map[string]string
 	err = json.NewDecoder(r.Body).Decode(&jsonData)
 	if err != nil {
@@ -239,7 +241,9 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 		utils.Respond(w, utils.Message(false, "cannot get move from json"))
 		return
 	}
+	fmt.Printf("moving")
 	m.Move(move)
+	fmt.Printf("moved")
 	resp := m.Update()
 	utils.Respond(w, resp)
 }
