@@ -149,9 +149,9 @@ func (m *Match) remove(xy int, isWhite bool) {
 		}
 	}
 }
-func (m *Match) Move(move string) {
+func (m *Match) Move(move string, log bool) {
 	// fmt.Printf("...Move %s\n", move)
-	m.LastMove = move
+	m.LastMove = move // TODO: place after successful move
 	fromTo := strings.Split(move, "~")
 	if len(fromTo) == 2 {
 		pos := []string{strings.Trim(fromTo[0], "KQIERANBPS"), strings.Trim(fromTo[1], "KQIERANBPS")}
@@ -173,10 +173,14 @@ func (m *Match) Move(move string) {
 				}
 			}
 			if rem > -1 {
-				m.Log = append(m.Log, m.White.Pieces[repl][:1]+pos[0]+"x"+m.Black.Pieces[rem])
+				if log {
+					m.Log = append(m.Log, m.White.Pieces[repl][:1]+pos[0]+"x"+m.Black.Pieces[rem])
+				}
 				m.Black.Pieces = append(m.Black.Pieces[:rem], m.Black.Pieces[rem+1:]...)
 			} else {
-				m.Log = append(m.Log, m.White.Pieces[repl][:1]+pos[0]+"~"+pos[1])
+				if log {
+					m.Log = append(m.Log, m.White.Pieces[repl][:1]+pos[0]+"~"+pos[1])
+				}
 			}
 		} else {
 			for p := range m.Black.Pieces {
@@ -185,7 +189,7 @@ func (m *Match) Move(move string) {
 				}
 			}
 			if repl > -1 {
-				if m.Black.Pieces[repl] == pos[0] {
+				if m.Black.Pieces[repl][1:] == pos[0] {
 					m.Black.Pieces[repl] = m.Black.Pieces[repl][:1] + pos[1]
 				}
 				// now remove white piece
@@ -196,46 +200,66 @@ func (m *Match) Move(move string) {
 					}
 				}
 				if rem > -1 {
-					m.Log = append(m.Log, m.Black.Pieces[repl][:1]+pos[0]+"x"+m.White.Pieces[rem])
+					if log {
+						m.Log = append(m.Log, m.Black.Pieces[repl][:1]+pos[0]+"x"+m.White.Pieces[rem])
+					}
 					m.White.Pieces = append(m.White.Pieces[:rem], m.White.Pieces[rem+1:]...)
 				} else {
-					m.Log = append(m.Log, m.Black.Pieces[repl][:1]+pos[0]+"~"+pos[1])
+					if log {
+						m.Log = append(m.Log, m.Black.Pieces[repl][:1]+pos[0]+"~"+pos[1])
+					}
 				}
 			}
 		}
 	} else { // special moves
-
-		pos := strings.Trim(fromTo[0][1:], "KQIERANB")
-		repl := -1
-		for p := range m.White.Pieces {
-			if m.White.Pieces[p][1:] == pos {
-				repl = p
-			}
-		}
-		if repl > -1 {
-			if m.White.Pieces[repl][1:] == pos {
-				if m.White.Pieces[repl][0] == 'P' {
-					m.White.Pieces[repl] = "S" + pos
-				} else {
-					m.White.Pieces[repl] = "P" + pos
-				}
-			}
-		} else {
-			for p := range m.Black.Pieces {
-				if m.Black.Pieces[p][1:] == pos {
+		m.Log = append(m.Log, fromTo[0])
+		if fromTo[0][0] == 'v' || fromTo[0][len(fromTo[0])-1] == 'v' { // black formation march
+			perp := strings.Trim(fromTo[0], "v")
+			leftRight := strings.Split(fromTo[0], perp)
+			m.marchFlank(utils.XY[perp], len(leftRight[0]), false)
+			m.marchFlank(utils.XY[perp], len(leftRight[1]), true)
+		} else if fromTo[0][0] == '^' || fromTo[0][len(fromTo[0])-1] == '^' { // white formation march
+			perp := strings.Trim(fromTo[0], "^")
+			leftRight := strings.Split(fromTo[0], perp)
+			m.marchFlank(utils.XY[perp], len(leftRight[0]), false)
+			m.marchFlank(utils.XY[perp], len(leftRight[1]), true)
+		} else if fromTo[0][0] == '#' || fromTo[0][len(fromTo[0])-1] == '#' { // formation switch arms
+			perp := strings.Trim(fromTo[0], "#")
+			leftRight := strings.Split(fromTo[0], perp)
+			m.switchArmsFlank(utils.XY[perp], len(leftRight[0]), false)
+			m.switchArmsFlank(utils.XY[perp], len(leftRight[1]), true)
+		} else { // unit switch arms
+			pos := strings.Trim(fromTo[0], "PS")
+			repl := -1
+			for p := range m.White.Pieces {
+				if m.White.Pieces[p][1:] == pos {
 					repl = p
 				}
 			}
 			if repl > -1 {
-				if m.Black.Pieces[repl][1:] == pos {
-					if m.Black.Pieces[repl][0] == 'P' {
-						m.Black.Pieces[repl] = "S" + pos
+				if m.White.Pieces[repl][1:] == pos {
+					if m.White.Pieces[repl][0] == 'P' {
+						m.White.Pieces[repl] = "S" + pos
 					} else {
-						m.Black.Pieces[repl] = "P" + pos
+						m.White.Pieces[repl] = "P" + pos
+					}
+				}
+			} else {
+				for p := range m.Black.Pieces {
+					if m.Black.Pieces[p][1:] == pos {
+						repl = p
+					}
+				}
+				if repl > -1 {
+					if m.Black.Pieces[repl][1:] == pos {
+						if m.Black.Pieces[repl][0] == 'P' {
+							m.Black.Pieces[repl] = "S" + pos
+						} else {
+							m.Black.Pieces[repl] = "P" + pos
+						}
 					}
 				}
 			}
-
 		}
 	}
 	// TODO: still have to do special moves
@@ -274,9 +298,10 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 					if assaults[attack] < 0 { // formation switch arms
 						left := -assaults[attack] / 100000
 						right := (-assaults[attack] - left*100000) / 10000
-						testMatch.switchArmsFlank(perp, left, false)
-						testMatch.switchArmsFlank(perp, right, true)
-						testMatch.LastMove = "#########"[:left] + utils.Hex[perp] + "#########"[:right]
+						if left > 0 && right > 0 {
+							testMove := "#########"[:left] + utils.Hex[perp] + "#########"[:right]
+							testMatch.Move(testMove, true)
+						}
 					} else if assaults[attack] < 10000 { // not formation march or promotion
 						sa := -1
 						if perp == assaults[attack] { // switch arms
@@ -294,16 +319,14 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 							}
 						} else { // normal move
 							testMove := utils.Hex[perp] + "~" + utils.Hex[assaults[attack]]
-							testMatch.Move(testMove)
+							testMatch.Move(testMove, true)
 						}
 					} else if assaults[attack] < 1000000 { // formation move
 						left := assaults[attack] / 100000
 						right := (assaults[attack] - left*100000) / 10000
-						// fmt.Printf("leftRight %d: %d %d\n", assaults[attack], left, right)
-						// fmt.Printf("march %d:%s  %v >>", perp, utils.Hex[perp], testMatch.White.Pieces)
-						testMatch.marchFlank(perp, left, false)
-						//testMatch.marchFlank(perp, right, true)
-						testMatch.LastMove = "^^^^^^^^^^"[:left] + utils.Hex[perp] + "^^^^^^^^^^"[:right]
+
+						testMove := "^^^^^^^^^^"[:left] + utils.Hex[perp] + "^^^^^^^^^^"[:right]
+						testMatch.Move(testMove, true)
 					} else { // promotion fmt.Printf("promote to %d", assaults[attack])
 						testMatch.remove(perp, true)
 						prom := utils.Hex[assaults[attack]%1000000]
@@ -353,9 +376,8 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 						left := -assaults[attack] / 100000
 						right := (-assaults[attack] - left*100000) / 10000
 						if left > 0 && right > 0 {
-							testMatch.switchArmsFlank(perp, left, false)
-							testMatch.switchArmsFlank(perp, right, true)
-							testMatch.LastMove = "#########"[:left] + utils.Hex[perp] + "#########"[:right]
+							testMove := "#########"[:left] + utils.Hex[perp] + "#########"[:right]
+							testMatch.Move(testMove, true)
 						}
 					} else if assaults[attack] < 10000 {
 						sa := -1
@@ -375,15 +397,13 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 							testMatch.LastMove = utils.Hex[perp]
 						} else { // normal move
 							testMove := utils.Hex[perp] + "~" + utils.Hex[assaults[attack]]
-							testMatch.Move(testMove)
+							testMatch.Move(testMove, true)
 						}
 					} else if assaults[attack] < 1000000 { // formation move
 						left := assaults[attack] / 100000
 						right := (assaults[attack] - left*100000) / 10000
-						//fmt.Printf("leftRight %d: %d %d\n", assaults[attack], left, right)
-						testMatch.marchFlank(perp, left, false)
-						testMatch.marchFlank(perp, right, true)
-						testMatch.LastMove = "vvvvvvvvvv"[:left] + utils.Hex[perp] + "vvvvvvvvv"[:right]
+						testMove := "vvvvvvvvvv"[:left] + utils.Hex[perp] + "vvvvvvvvvv"[:right]
+						testMatch.Move(testMove, true)
 					} else { // promotion						fmt.Printf("promote of %d:%s to %d\n", perp, utils.Hex[perp], assaults[attack])
 						testMatch.remove(perp, false)
 						prom := utils.Hex[assaults[attack]%1000000]
@@ -469,7 +489,27 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 	}
 
 	if len(bestNMoves) == 0 {
-		fmt.Printf("*-*-* no move\n")
+		if m.WhitePlayerId > 0 && m.BlackPlayerId > 0 && m.WhitePlayerId != m.BlackPlayerId {
+			if len(m.Log)%2 == 0 { // white won
+				winner := GetUser(m.WhitePlayerId)
+				loser := GetUser(m.BlackPlayerId)
+				oldRank := winner.Rank
+				winner.Rank = (winner.Rank*24 + loser.Rank + 200) / 25
+				loser.Rank = (loser.Rank*24 + oldRank - 200) / 25
+				winner.Update()
+				loser.Update()
+				m.Game.Status = "White Won"
+			} else {
+				winner := GetUser(m.BlackPlayerId)
+				loser := GetUser(m.WhitePlayerId)
+				oldRank := winner.Rank
+				winner.Rank = (winner.Rank*24 + loser.Rank + 200) / 25
+				loser.Rank = (loser.Rank*24 + oldRank - 200) / 25
+				winner.Update()
+				loser.Update()
+				m.Game.Status = "Black Won"
+			}
+		}
 		return m // no valid move
 	}
 	//fmt.Printf("*-*-*     AI: %s:%d\n", bestNMoves[highest].LastMove, bestNMoves[highest].board.Score)
@@ -501,6 +541,9 @@ func (match *Match) switchArms(pos int, isWhite bool) {
 func (match *Match) switchArmsFlank(leader, recur int, right bool) {
 	if recur < 0 {
 		return
+	}
+	if match.board == nil || match.board.Occupant == nil {
+		match.Analyse()
 	}
 	match.switchArms(leader, match.board.Occupant[leader][0] == 'w')
 	if right {
@@ -540,16 +583,19 @@ func (match *Match) marchFlank(leader, recur int, right bool) {
 	if recur < 0 {
 		return
 	}
+	if match.board == nil || match.board.Occupant == nil {
+		match.Analyse()
+	}
 	if right {
 		if match.board.Occupant[leader][0] == 'w' {
-			match.Move(utils.Hex[leader] + "~" + utils.Hex[leader-2])
+			match.Move(utils.Hex[leader]+"~"+utils.Hex[leader-2], false)
 			if match.board.Occupant[leader+101] == "wP" {
 				match.marchFlank(leader+101, recur-1, true)
 			} else if match.board.Occupant[leader+103] == "wS" {
 				match.marchFlank(leader+103, recur-1, true)
 			}
 		} else {
-			match.Move(utils.Hex[leader] + "~" + utils.Hex[leader+2])
+			match.Move(utils.Hex[leader]+"~"+utils.Hex[leader+2], false)
 			if match.board.Occupant[leader+99] == "bP" {
 				match.marchFlank(leader+99, recur-1, true)
 			} else if match.board.Occupant[leader+97] == "bS" {
@@ -558,14 +604,14 @@ func (match *Match) marchFlank(leader, recur int, right bool) {
 		}
 	} else {
 		if match.board.Occupant[leader][0] == 'w' {
-			match.Move(utils.Hex[leader] + "~" + utils.Hex[leader-2])
+			match.Move(utils.Hex[leader]+"~"+utils.Hex[leader-2], false)
 			if match.board.Occupant[leader-99] == "wP" {
 				match.marchFlank(leader-99, recur-1, false)
 			} else if match.board.Occupant[leader-97] == "wS" {
 				match.marchFlank(leader-97, recur-1, false)
 			}
 		} else {
-			match.Move(utils.Hex[leader] + "~" + utils.Hex[leader+2])
+			match.Move(utils.Hex[leader]+"~"+utils.Hex[leader+2], false)
 			if match.board.Occupant[leader-101] == "bP" {
 				match.marchFlank(leader-101, recur-1, false)
 			} else if match.board.Occupant[leader-103] == "bS" {

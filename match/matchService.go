@@ -47,7 +47,6 @@ func DeleteMatch(w http.ResponseWriter, r *http.Request) {
 
 	ListMatches(w, r)
 }
-
 func AIMove(w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
@@ -86,7 +85,6 @@ func AIMove(w http.ResponseWriter, r *http.Request) {
 	resp["move"] = move.LastMove
 	utils.Respond(w, resp)
 }
-
 func AcceptMatch(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	idStr := params["id"]
@@ -114,7 +112,6 @@ func AcceptMatch(w http.ResponseWriter, r *http.Request) {
 
 	ListMatches(w, r)
 }
-
 func CreateMatch(w http.ResponseWriter, r *http.Request) {
 
 	var jsonData map[string]string
@@ -172,7 +169,102 @@ func CreateMatch(w http.ResponseWriter, r *http.Request) {
 	match.Create()
 	ListMatches(w, r)
 }
+func ResignMatch(w http.ResponseWriter, r *http.Request) {
+	var mId uint
+	err := json.NewDecoder(r.Body).Decode(&mId)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for new comment"))
+		return
+	}
 
+	m := store.GetMatch(mId)
+	user, _ := user.FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+
+	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), " "))%2 == 0 { // white turn
+		if m.WhitePlayerId != user.ID {
+			utils.Respond(w, utils.Message(false, "Not your turn, dumbass."))
+			return
+		} else {
+			winner := store.GetUser(m.BlackPlayerId)
+			oldRank := winner.Rank
+			winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
+			user.Rank = (user.Rank*24 + oldRank - 200) / 25
+			winner.Update()
+			user.Update()
+			m.Game.Status = "White Resigns"
+		}
+	} else {
+		if m.BlackPlayerId != user.ID {
+			utils.Respond(w, utils.Message(false, "Not your turn, dumbass."))
+			return
+		} else {
+			winner := store.GetUser(m.WhitePlayerId)
+			oldRank := winner.Rank
+			winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
+			user.Rank = (user.Rank*24 + oldRank - 200) / 25
+			winner.Update()
+			user.Update()
+			m.Game.Status = "Black Resigns"
+		}
+	}
+
+	resp := m.Update()
+
+	resp["rank"] = fmt.Sprintf("Your new rating is %d", user.Rank)
+
+	utils.Respond(w, resp)
+}
+func DrawMatch(w http.ResponseWriter, r *http.Request) {
+	var mId uint
+	err := json.NewDecoder(r.Body).Decode(&mId)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for new comment"))
+		return
+	}
+
+	m := store.GetMatch(mId)
+	user, _ := user.FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+
+	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), " "))%2 == 0 { // white turn
+		if m.Game.Status == "Draw" {
+			winner := store.GetUser(m.BlackPlayerId)
+			oldRank := winner.Rank
+			winner.Rank = (winner.Rank*24 + user.Rank) / 25
+			user.Rank = (user.Rank*24 + oldRank) / 25
+			winner.Update()
+			user.Update()
+		} else {
+			m.Game.Status = "Draw Offered"
+		}
+	} else {
+		if m.Game.Status == "Draw" {
+			winner := store.GetUser(m.WhitePlayerId)
+			oldRank := winner.Rank
+			winner.Rank = (winner.Rank*24 + user.Rank) / 25
+			user.Rank = (user.Rank*24 + oldRank) / 25
+			winner.Update()
+			user.Update()
+		} else {
+			m.Game.Status = "Draw Offered"
+		}
+	}
+
+	resp := m.Update()
+
+	resp["rank"] = fmt.Sprintf("Your new rating is %d", user.Rank)
+
+	utils.Respond(w, resp)
+}
 func SaveMatch(w http.ResponseWriter, r *http.Request) {
 	match := &store.Match{}
 	err := json.NewDecoder(r.Body).Decode(match)
@@ -198,7 +290,6 @@ func SaveMatch(w http.ResponseWriter, r *http.Request) {
 	resp := match.Update()
 	utils.Respond(w, resp)
 }
-
 func MakeMove(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	idStr := params["id"]
@@ -209,8 +300,11 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 	m := store.GetMatch(uint(id))
 
-	fmt.Printf("match found")
 	user, _ := user.FindUser(r)
+	opponentToken := store.Online()[m.BlackPlayerId]
+	if user.ID == m.BlackPlayerId {
+		opponentToken = store.Online()[m.WhitePlayerId]
+	}
 
 	if user == nil {
 		utils.Respond(w, utils.Message(false, "User not found."))
@@ -229,7 +323,6 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	fmt.Printf("decoding")
 	var jsonData map[string]string
 	err = json.NewDecoder(r.Body).Decode(&jsonData)
 	if err != nil {
@@ -241,10 +334,19 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 		utils.Respond(w, utils.Message(false, "cannot get move from json"))
 		return
 	}
-	fmt.Printf("moving")
-	m.Move(move)
-	fmt.Printf("moved")
+	m.Move(move, true)
 	resp := m.Update()
+	resp["state"] = m.AI(-1, 1, nil).LastMove
+	if m.LastMove == "Checkmate" {
+		lastLog := m.Log[len(m.Log)-1]
+		m.Log = append(m.Log[:len(m.Log)-2], lastLog+"++")
+		m.Update()
+	} else if m.LastMove == "Stalemate" {
+		lastLog := m.Log[len(m.Log)-1]
+		m.Log = append(m.Log[:len(m.Log)-2], lastLog+"=")
+		m.Update()
+	}
+	store.SessionMap[opponentToken].Inbox <- fmt.Sprintf("type||notify|||match||%s-%d", m.Title, m.ID)
 	utils.Respond(w, resp)
 }
 func LoadMatch(w http.ResponseWriter, r *http.Request) { // {id:0, name:'offline', white:{pieces:['Rd54', 'Rd5', 'Rc52', 'Nd53', 'Nd51', 'Nc33', 'Bc53', 'Bc55', 'Bd52', 'Qd41', 'Kc44', 'Id31', 'Ed4', 'Pd55', 'Pd44', 'Pd33', 'Pd21', 'Pc22', 'Pc31', 'Pc41', 'Pc51', 'Sd43', 'Sd32', 'Sd2', 'Sc32', 'Sc42', 'Ad42', 'Ad3', 'Ac43'], time:300}, black:{pieces:['Ra5', 'Rf52', 'Ra54', 'Nf53', 'Nf55', 'Na31', 'Ba53', 'Ba51', 'Bf54', 'Qf44', 'Ka41', 'If33', 'Ea4', 'Pf51', 'Pf41', 'Pf31', 'Pf22', 'Pa21', 'Pa33', 'Pa44', 'Pa55', 'Sf42', 'Sf32', 'Sa2', 'Sa32', 'Sa43', 'Af43', 'Aa3', 'Aa42'], time:300}, log:[], type:{game:300, move:15}});
@@ -269,7 +371,6 @@ func LoadMatch(w http.ResponseWriter, r *http.Request) { // {id:0, name:'offline
 
 	utils.Respond(w, resp)
 }
-
 func ListMatches(w http.ResponseWriter, r *http.Request) {
 
 	user, _ := user.FindUser(r)
@@ -288,6 +389,7 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 	openMatches := make([][]string, 0)
 	readyMatches := make([][]string, 0)
 	waitingMatches := make([][]string, 0)
+	finishedMatches := make([][]string, 0)
 	for m := range matches {
 		if matches[m].BlackPlayerId == user.ID && matches[m].WhitePlayerId == user.ID {
 			savedMatches = append(savedMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
@@ -308,6 +410,8 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 						waitingMatches = append(waitingMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
 					}
 				}
+			} else if matches[m].Game.Status == "White Won" || matches[m].Game.Status == "Black Won" {
+				finishedMatches = append(finishedMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
 			}
 		}
 	}

@@ -13,15 +13,16 @@ import (
 	"github.com/jarrancarr/ChexxServer/tutor"
 	"github.com/jarrancarr/ChexxServer/user"
 	"github.com/jarrancarr/ChexxServer/utils"
+	"github.com/jarrancarr/ChexxServer/webSocket"
 )
 
-var test = false
+var debug = false
 
-//var test = true
+//var debug = true
 
 func main() {
 	utils.Init()
-	if test {
+	if debug {
 		fmt.Println("running test")
 		//store.DoTest()
 		match := &store.Match{}
@@ -31,12 +32,13 @@ func main() {
 		//                             Nd53    Nd51    Bc53    Bc55    Bd52    Kc54    Pd55    Pd44    Pe21    Pe    P*    Pc31    Pc41    Pc51    Sd43    Se1    Sc1    Sc42    Ad42    Ae2    Ac4
 		// 							   Ka52    If2    Ec2    Pf51    Pf41    Pe22    Pf    Pa33    Pa44    Pa55    Sf42    Sf1    Sa    Sb1    Sa43    Af43    Aa3    Aa42
 
-		match.White.Pieces = []string{"Kd5", "Pc32"}
-		match.Black.Pieces = []string{"Ka52"} // , "Bb32"
+		match.White.Pieces = []string{"Kd5", "Pc32", "Pc42"}
+		match.Black.Pieces = []string{"Ka52", "Pa33", "Pa44"} // , "Bb32"
 		//match.White.Pieces = []string{"Pd55", "Pd44", "Pd33"}
 		//match.Black.Pieces = []string{"Pf21"}
-		//match.Log = []string{"blank"} // to make this blacks move
-		match.Move("Pc32~c21")
+		match.Log = []string{"blank"} // to make this blacks move
+		match.Move("a33#", true)
+		//match.Move("a33v", true)
 		// match.TestAttacks("f5")
 		// match.Show("f5")
 		// for i := 0; i < 1; i++ {
@@ -47,7 +49,7 @@ func main() {
 		// 		fmt.Println("No move returned")
 		// 	}
 		// }
-		fmt.Println("move: " + match.LastMove)
+		//fmt.Println("move: " + match.LastMove)
 		match.Analyse()
 		match.Examine()
 		os.Exit(0)
@@ -65,6 +67,7 @@ func main() {
 	r.HandleFunc("/user/facebook", user.Facebook)
 	r.HandleFunc("/user/logout", user.Logout)
 	r.HandleFunc("/user/register", user.RegisterUser)
+	r.HandleFunc("/user/save", user.SaveUser)
 	r.HandleFunc("/user/{id}", user.UserInfo)
 	r.HandleFunc("/match/getMatches", match.Matches)
 	r.HandleFunc("/match/save", match.SaveMatch)
@@ -74,9 +77,13 @@ func main() {
 	r.HandleFunc("/match/challenge", match.CreateMatch)
 	r.HandleFunc("/match/accept/{id}", match.AcceptMatch)
 	r.HandleFunc("/match/delete/{id}", match.DeleteMatch)
+	r.HandleFunc("/match/resign", match.ResignMatch)
 	r.HandleFunc("/match/cpu/{level}", match.AIMove)
 
+	r.PathPrefix("/pub").Handler(http.StripPrefix("/pub/", http.FileServer(http.Dir("./public/"))))
+	r.Handle("/ws", webSocket.WsHandler{})
 	http.Handle("/", r)
+
 	r.Use(user.JwtAuthentication)
 
 	router := handlers.LoggingHandler(os.Stdout, handlers.CORS(

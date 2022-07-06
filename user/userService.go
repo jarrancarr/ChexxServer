@@ -25,6 +25,7 @@ func FindUser(r *http.Request) (*store.User, error) {
 		return nil, errors.New("No User by that ID found")
 	}
 	user := store.Sessions()[token].User
+	user.Token = token
 	return user, nil
 }
 
@@ -36,7 +37,7 @@ func GetUser(u uint) *store.User {
 		return nil
 	}
 
-	user.Property = make(map[string]string)
+	user.Prop = make(map[string]string)
 
 	// convertProps(user)
 
@@ -56,7 +57,7 @@ func GetUserByUserIdOrEmail(uid, email string) *store.User {
 		}
 	}
 
-	user.Property = make(map[string]string)
+	user.Prop = make(map[string]string)
 	// convertProps(user)
 	user.Password = ""
 	return user
@@ -105,11 +106,11 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		utils.Respond(w, utils.Message(false, "Invalid request"))
 		return
 	}
-	store.Sessions()[user.Token] = nil
+	delete(store.Sessions(), user.Token)
+	delete(store.Online(), user.ID)
 	utils.Respond(w, utils.Message(true, "Logged Out"))
 	fmt.Printf("user %s logged out\n", user.Name)
 }
-
 func Login(userId, password string) map[string]interface{} {
 
 	// is user already logged in with a session?
@@ -125,6 +126,11 @@ func Login(userId, password string) map[string]interface{} {
 
 	// fmt.Println(user)
 
+	json.Unmarshal([]byte(user.Property), &user.Prop)
+	if user.Prop == nil {
+		user.Prop = make(map[string]string)
+		user.Prop["test"] = "success"
+	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
 		return utils.Message(false, "Invalid login credentials. Please try again")
@@ -139,13 +145,13 @@ func Login(userId, password string) map[string]interface{} {
 
 	// convertProps(account)
 
-	store.Sessions()[user.Token] = &store.Session{User: user, NumNewMoves: 0}
+	store.Sessions()[user.Token] = &store.Session{User: user, NumNewMoves: 0, Inbox: make(chan interface{})}
+	store.Online()[user.ID] = user.Token
 
 	resp := utils.Message(true, "Logged In")
 	resp["user"] = user
 	return resp
 }
-
 func UserInfo(w http.ResponseWriter, r *http.Request) {
 	user, _ := FindUser(r)
 
@@ -158,7 +164,7 @@ func UserInfo(w http.ResponseWriter, r *http.Request) {
 	idStr := params["id"]
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		utils.Respond(w, utils.Message(false, "Match ID not found."))
+		utils.Respond(w, utils.Message(false, "ID not found."))
 		return
 	}
 	u := store.GetUser(uint(id))
@@ -168,7 +174,6 @@ func UserInfo(w http.ResponseWriter, r *http.Request) {
 
 	utils.Respond(w, resp)
 }
-
 func RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 	user := &store.User{}
@@ -198,8 +203,8 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		notAuth := []string{"/tutor", "/user", "/match/cpu"} //List of endpoints that doesn't require auth
-		requestPath := r.URL.Path                            //current request path
+		notAuth := []string{"/tutor", "/user", "/match/cpu", "/pub", "/ws"} //List of endpoints that doesn't require auth
+		requestPath := r.URL.Path                                           //current request path
 
 		//check if request does not need authentication, serve the request if it doesn't need it
 		for _, value := range notAuth {
@@ -258,4 +263,25 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r) //proceed in the middleware chain!
 	})
+}
+
+func SaveUser(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Save User")
+	modUser := &store.User{}
+	err := json.NewDecoder(r.Body).Decode(modUser)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for new comment"))
+		return
+	}
+
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+
+	user.Prop = modUser.Prop
+	resp := user.Update()
+	utils.Respond(w, resp)
 }

@@ -1,9 +1,11 @@
 package store
 
 import (
+	"encoding/json"
 	"os"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/gorilla/websocket"
 	"github.com/jarrancarr/ChexxServer/utils"
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
@@ -25,6 +27,9 @@ type About struct {
 	Interests string `json:"interests"`
 }
 
+type Friend struct {
+	UserId string
+}
 type User struct {
 	gorm.Model
 	Token         string            `json:"token" gorm:"-"`
@@ -32,11 +37,14 @@ type User struct {
 	Email         string            `json:"email"`
 	Name          string            `json:"fullName"`
 	Password      string            `json:"password"`
-	Property      map[string]string `json:"property" gorm:"-"`
+	Prop          map[string]string `json:"property" gorm:"-"`
+	Property      string            `json:"-"`
 	SignedRequest string            `json:"signedRequest"`
 	UserId        string            `json:"userid"`
 	Rank          uint32            `json:"rank"`
 	About         About             `json:"about"`
+	Friend        []string          `json:"friend" gorm:"-"`
+	Friends       string            `json:"-" gorm:"friends"`
 
 	// Picture       []uint8 `json:"picture"`
 }
@@ -46,18 +54,26 @@ type Session struct {
 	// NotificationQueue []*Comment
 	NumNewMoves int
 	//Blitz             *Match
+	//Watching             *Match
 	//Polling           bool
-	//WsConn            *websocket.Conn
-	//Data              chan interface{}
+	WsConn *websocket.Conn
+	Inbox  chan interface{}
 }
 
 var SessionMap map[string]*Session // map of tokens to sessions
+var OnlineMapping map[uint]string  // map of ids to tokens
 
 func Sessions() map[string]*Session {
 	if SessionMap == nil {
 		SessionMap = make(map[string]*Session)
 	}
 	return SessionMap
+}
+func Online() map[uint]string {
+	if OnlineMapping == nil {
+		OnlineMapping = make(map[uint]string)
+	}
+	return OnlineMapping
 }
 
 type Team struct {
@@ -101,6 +117,52 @@ func GetUser(id uint) *User {
 	if u.Name == "" || u.Email == "" { //User not found!
 		return nil
 	}
-
+	json.Unmarshal([]byte(u.Property), &u.Prop)
+	if u.Prop == nil {
+		u.Prop = make(map[string]string)
+		u.Prop["test"] = "success"
+	}
+	json.Unmarshal([]byte(u.Friends), &u.Friend)
+	if u.Friend == nil {
+		u.Friend = []string{}
+	}
 	return u
+}
+func (u *User) Validate() (map[string]interface{}, bool) {
+
+	if u.Email == "" {
+		return utils.Message(false, "No Email"), false
+	}
+	if u.Name == "" {
+		return utils.Message(false, "No Name"), false
+	}
+
+	return utils.Message(false, "Requirement passed"), true
+}
+
+func (u *User) Update() map[string]interface{} {
+
+	if resp, ok := u.Validate(); !ok {
+		return resp
+	}
+
+	// convert properties
+
+	prop, err := json.Marshal(u.Prop)
+	if err == nil {
+		u.Property = string(prop)
+	}
+	friends, err := json.Marshal(u.Friend)
+	if err == nil {
+		u.Friends = string(friends)
+	}
+
+	GetDB().Save(u)
+
+	if u.ID <= 0 {
+		return utils.Message(false, "Failed to create message, connection error.")
+	}
+
+	response := utils.Message(true, "User updated")
+	return response
 }
