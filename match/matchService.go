@@ -186,31 +186,21 @@ func ResignMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), " "))%2 == 0 { // white turn
-		if m.WhitePlayerId != user.ID {
-			utils.Respond(w, utils.Message(false, "Not your turn, dumbass."))
-			return
-		} else {
-			winner := store.GetUser(m.BlackPlayerId)
-			oldRank := winner.Rank
-			winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
-			user.Rank = (user.Rank*24 + oldRank - 200) / 25
-			winner.Update()
-			user.Update()
-			m.Game.Status = "White Resigns"
-		}
+		winner := store.GetUser(m.BlackPlayerId)
+		oldRank := winner.Rank
+		winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
+		user.Rank = (user.Rank*24 + oldRank - 200) / 25
+		winner.Update()
+		user.Update()
+		m.Game.Status = "White Resigns"
 	} else {
-		if m.BlackPlayerId != user.ID {
-			utils.Respond(w, utils.Message(false, "Not your turn, dumbass."))
-			return
-		} else {
-			winner := store.GetUser(m.WhitePlayerId)
-			oldRank := winner.Rank
-			winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
-			user.Rank = (user.Rank*24 + oldRank - 200) / 25
-			winner.Update()
-			user.Update()
-			m.Game.Status = "Black Resigns"
-		}
+		winner := store.GetUser(m.WhitePlayerId)
+		oldRank := winner.Rank
+		winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
+		user.Rank = (user.Rank*24 + oldRank - 200) / 25
+		winner.Update()
+		user.Update()
+		m.Game.Status = "Black Resigns"
 	}
 
 	resp := m.Update()
@@ -236,24 +226,28 @@ func DrawMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), " "))%2 == 0 { // white turn
-		if m.Game.Status == "Draw" {
+		if m.Game.Status == "Draw Offered" {
 			winner := store.GetUser(m.BlackPlayerId)
 			oldRank := winner.Rank
 			winner.Rank = (winner.Rank*24 + user.Rank) / 25
 			user.Rank = (user.Rank*24 + oldRank) / 25
 			winner.Update()
 			user.Update()
+			m.Game.Status = "Draw"
+			m.Update()
 		} else {
 			m.Game.Status = "Draw Offered"
 		}
 	} else {
-		if m.Game.Status == "Draw" {
+		if m.Game.Status == "Draw Offered" {
 			winner := store.GetUser(m.WhitePlayerId)
 			oldRank := winner.Rank
 			winner.Rank = (winner.Rank*24 + user.Rank) / 25
 			user.Rank = (user.Rank*24 + oldRank) / 25
 			winner.Update()
 			user.Update()
+			m.Game.Status = "Draw"
+			m.Update()
 		} else {
 			m.Game.Status = "Draw Offered"
 		}
@@ -336,17 +330,19 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 	m.Move(move, true)
 	resp := m.Update()
-	resp["state"] = m.AI(-1, 1, nil).LastMove
-	if m.LastMove == "Checkmate" {
-		lastLog := m.Log[len(m.Log)-1]
-		m.Log = append(m.Log[:len(m.Log)-2], lastLog+"++")
-		m.Update()
-	} else if m.LastMove == "Stalemate" {
-		lastLog := m.Log[len(m.Log)-1]
-		m.Log = append(m.Log[:len(m.Log)-2], lastLog+"=")
-		m.Update()
+	//resp["state"] = m.AI(-1, 1, nil).LastMove
+	// if m.LastMove == "Checkmate" {
+	// 	lastLog := m.Log[len(m.Log)-1]
+	// 	m.Log = append(m.Log[:len(m.Log)-2], lastLog+"++")
+	// 	m.Update()
+	// } else if m.LastMove == "Stalemate" {
+	// 	lastLog := m.Log[len(m.Log)-1]
+	// 	m.Log = append(m.Log[:len(m.Log)-2], lastLog+"=")
+	// 	m.Update()
+	// }
+	if store.SessionMap[opponentToken] != nil {
+		store.SessionMap[opponentToken].Inbox <- fmt.Sprintf("type||notify|||match||%s-%d|||state||"+m.LastMove, m.Title, m.ID)
 	}
-	store.SessionMap[opponentToken].Inbox <- fmt.Sprintf("type||notify|||match||%s-%d", m.Title, m.ID)
 	utils.Respond(w, resp)
 }
 func LoadMatch(w http.ResponseWriter, r *http.Request) { // {id:0, name:'offline', white:{pieces:['Rd54', 'Rd5', 'Rc52', 'Nd53', 'Nd51', 'Nc33', 'Bc53', 'Bc55', 'Bd52', 'Qd41', 'Kc44', 'Id31', 'Ed4', 'Pd55', 'Pd44', 'Pd33', 'Pd21', 'Pc22', 'Pc31', 'Pc41', 'Pc51', 'Sd43', 'Sd32', 'Sd2', 'Sc32', 'Sc42', 'Ad42', 'Ad3', 'Ac43'], time:300}, black:{pieces:['Ra5', 'Rf52', 'Ra54', 'Nf53', 'Nf55', 'Na31', 'Ba53', 'Ba51', 'Bf54', 'Qf44', 'Ka41', 'If33', 'Ea4', 'Pf51', 'Pf41', 'Pf31', 'Pf22', 'Pa21', 'Pa33', 'Pa44', 'Pa55', 'Sf42', 'Sf32', 'Sa2', 'Sa32', 'Sa43', 'Af43', 'Aa3', 'Aa42'], time:300}, log:[], type:{game:300, move:15}});

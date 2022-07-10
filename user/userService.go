@@ -265,8 +265,39 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 	})
 }
 
+func Message(w http.ResponseWriter, r *http.Request) {
+
+	msg := &struct {
+		Topic string `json:"topic"`
+		Text  string `json:"body"`
+		To    string `json:"recipient"`
+	}{}
+
+	err := json.NewDecoder(r.Body).Decode(msg)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for new comment"))
+		return
+	}
+
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+	recipient := GetUserByUserIdOrEmail(msg.To, "")
+	newMessage := store.Message{Author: user.ID, Topic: msg.Topic, Body: msg.Text, Recipients: msg.To}
+
+	newMessage.Create()
+
+	if session, ok := store.Sessions()[store.OnlineMapping[recipient.ID]]; ok {
+		session.Inbox <- newMessage
+	}
+
+	utils.Respond(w, utils.Message(true, "Ill let him know."))
+}
 func SaveUser(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Save User")
+	// fmt.Println("Save User")
 	modUser := &store.User{}
 	err := json.NewDecoder(r.Body).Decode(modUser)
 	if err != nil {

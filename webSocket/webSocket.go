@@ -59,7 +59,7 @@ func (wsh WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if store.SessionMap[msg.Token] != nil {
 				switch msg.Type {
 				case "ping":
-					store.SessionMap[msg.Token].Inbox <- fmt.Sprintf("ping|||%d", time.Now().Unix())
+					store.Sessions()[msg.Token].Inbox <- fmt.Sprintf("bounce||%d", time.Now().Unix())
 				case "login":
 					store.SessionMap[msg.Token].WsConn = conn
 					go wsDataQueue(msg.Token)
@@ -72,13 +72,9 @@ func (wsh WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func wsDataQueue(token string) {
-	log.Println("starting queue")
 	if store.SessionMap[token].WsConn != nil {
 		for {
-			log.Println("listening to queue")
 			d := <-store.SessionMap[token].Inbox
-
-			log.Printf("message... %v\n", d)
 			switch d.(type) {
 			case string:
 				pair := strings.Split(d.(string), "|||")
@@ -99,6 +95,18 @@ func wsDataQueue(token string) {
 			case *store.Match:
 				match, _ := json.Marshal(d)
 				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"match\":"+string(match)+"}"))
+				//case bool:
+				// quit out
+			case store.Message:
+				sender := store.SessionMap[store.Online()[d.(store.Message).Author]].User
+				message := &struct {
+					ID    uint   `json:"ID"`
+					From  string `json:"from"`
+					Topic string `json:"topic"`
+					Text  string `json:"text"`
+				}{ID: d.(store.Message).ID, From: sender.Name, Topic: d.(store.Message).Topic, Text: d.(store.Message).Body}
+				msg, _ := json.Marshal(message)
+				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"type\":\"message\",\"message\":"+string(msg)+"}"))
 			}
 		}
 	}

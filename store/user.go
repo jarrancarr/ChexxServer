@@ -35,17 +35,18 @@ type User struct {
 	Token         string            `json:"token" gorm:"-"`
 	Expire        int64             `json:"data_access_expiration_time"`
 	Email         string            `json:"email"`
+	UserId        string            `json:"userid"`
 	Name          string            `json:"fullName"`
 	Password      string            `json:"password"`
 	Prop          map[string]string `json:"property" gorm:"-"`
 	Property      string            `json:"-"`
 	SignedRequest string            `json:"signedRequest"`
-	UserId        string            `json:"userid"`
 	Rank          uint32            `json:"rank"`
 	About         About             `json:"about"`
 	Friend        []string          `json:"friend" gorm:"-"`
 	Friends       string            `json:"-" gorm:"friends"`
-
+	Hangout       []string          `json:"hangout" gorm:"-"`
+	Hangouts      string            `json:"-" gorm:"hangouts"`
 	// Picture       []uint8 `json:"picture"`
 }
 
@@ -53,7 +54,7 @@ type Session struct {
 	User *User
 	// NotificationQueue []*Comment
 	NumNewMoves int
-	//Blitz             *Match
+	Blitz       *Match
 	//Watching             *Match
 	//Polling           bool
 	WsConn *websocket.Conn
@@ -109,7 +110,6 @@ func (u *User) Create() map[string]interface{} {
 	response["user"] = u
 	return response
 }
-
 func GetUser(id uint) *User {
 
 	u := &User{}
@@ -126,6 +126,10 @@ func GetUser(id uint) *User {
 	if u.Friend == nil {
 		u.Friend = []string{}
 	}
+	json.Unmarshal([]byte(u.Hangouts), &u.Hangout)
+	if u.Hangout == nil {
+		u.Hangout = []string{"International Lounge"}
+	}
 	return u
 }
 func (u *User) Validate() (map[string]interface{}, bool) {
@@ -136,10 +140,12 @@ func (u *User) Validate() (map[string]interface{}, bool) {
 	if u.Name == "" {
 		return utils.Message(false, "No Name"), false
 	}
+	if u.UserId == "" {
+		return utils.Message(false, "No UserId"), false
+	}
 
-	return utils.Message(false, "Requirement passed"), true
+	return utils.Message(true, "Requirement passed"), true
 }
-
 func (u *User) Update() map[string]interface{} {
 
 	if resp, ok := u.Validate(); !ok {
@@ -156,11 +162,15 @@ func (u *User) Update() map[string]interface{} {
 	if err == nil {
 		u.Friends = string(friends)
 	}
+	hangouts, err := json.Marshal(u.Hangout)
+	if err == nil {
+		u.Hangouts = string(hangouts)
+	}
 
 	GetDB().Save(u)
 
 	if u.ID <= 0 {
-		return utils.Message(false, "Failed to create message, connection error.")
+		return utils.Message(false, "Failed to create user, connection error.")
 	}
 
 	response := utils.Message(true, "User updated")
