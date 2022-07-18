@@ -69,7 +69,13 @@ func main() {
 	r.HandleFunc("/user/logout", user.Logout)
 	r.HandleFunc("/user/register", user.RegisterUser)
 	r.HandleFunc("/user/save", user.SaveUser)
+	r.HandleFunc("/user/message/ok/{id}", user.MessageOk)
 	r.HandleFunc("/user/message", user.Message)
+	r.HandleFunc("/user/friendRequest", user.FriendRequest)
+	r.HandleFunc("/user/friendAccept", user.FriendAccept)
+	r.HandleFunc("/user/friendReject", user.FriendReject)
+
+	r.HandleFunc("/user/queues", user.Queues)
 	r.HandleFunc("/user/{id}", user.UserInfo)
 	r.HandleFunc("/match/getMatches", match.Matches)
 	r.HandleFunc("/match/save", match.SaveMatch)

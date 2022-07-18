@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jarrancarr/ChexxServer/utils"
 	"github.com/jinzhu/gorm"
@@ -53,6 +54,15 @@ type Board struct {
 	MoveCount    int
 }
 
+var BlitzMap map[string]*Match // map of tokens to blitx matches
+
+func BlitzMatches() map[string]*Match {
+	if BlitzMap == nil {
+		BlitzMap = make(map[string]*Match)
+	}
+	return BlitzMap
+}
+
 func (m *Match) Validate() (map[string]interface{}, bool) {
 
 	if m.Title == "" {
@@ -67,7 +77,7 @@ func (m *Match) Create() map[string]interface{} {
 		return resp
 	}
 
-	m.Logs = strings.Join(m.Log, " ")
+	m.Logs = "" //strings.Join(m.Log, ":::")
 	m.BlackArmy = strings.Join(m.Black.Pieces, " ") + "|" + fmt.Sprintf("%d", m.Black.Time)
 	m.WhiteArmy = strings.Join(m.White.Pieces, " ") + "|" + fmt.Sprintf("%d", m.White.Time)
 	m.BlackPlayerId = m.Black.UserId
@@ -89,7 +99,7 @@ func (m *Match) Update() map[string]interface{} {
 		return resp
 	}
 
-	m.Logs = strings.Trim(strings.Join(m.Log, " "), " ")
+	m.Logs = strings.Trim(strings.Join(m.Log, ":::"), " ")
 	m.BlackArmy = strings.Join(m.Black.Pieces, " ")
 	m.WhiteArmy = strings.Join(m.White.Pieces, " ")
 	strings.Trim(strings.Replace(m.WhiteArmy, "  ", " ", -1), " ")
@@ -113,7 +123,7 @@ func GetMatch(id uint) *Match {
 	m := &Match{}
 	GetDB().Table("matches").Where("id = ?", id).First(m)
 
-	m.Log = strings.Split(strings.Trim(m.Logs, " "), " ")
+	m.Log = strings.Split(strings.Trim(m.Logs, " "), ":::")
 
 	black := strings.Split(m.BlackArmy, "|")
 	blackClock, _ := strconv.Atoi(black[1])
@@ -292,13 +302,14 @@ func (m *Match) Move(move string, log bool) {
 	m.Analyse()
 	if m.board.Mate {
 		if m.board.WhiteInCheck || m.board.BlackInCheck {
-			entry += "++"
+			entry += "#"
 		} else {
 			entry += "=="
 		}
 	} else if m.board.WhiteInCheck || m.board.BlackInCheck {
 		entry += "+"
 	}
+	entry += fmt.Sprintf("::%v::...::...", time.Now().Sub(m.CreatedAt).Seconds())
 	if log {
 		m.Log = append(m.Log, entry)
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,7 +19,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var DEBUG = true
+
 func FindUser(r *http.Request) (*store.User, error) {
+	if DEBUG {
+		log.Println("FindUser")
+	}
 	token := r.Header.Get("Authorization")
 	// fmt.Println(">>>" + token + "<<<")
 	if store.Sessions()[token] == nil {
@@ -30,7 +36,9 @@ func FindUser(r *http.Request) (*store.User, error) {
 }
 
 func GetUser(u uint) *store.User {
-
+	if DEBUG {
+		log.Println("GetUser")
+	}
 	user := &store.User{}
 	store.GetDB().Table("users").Where("id = ?", u).First(user)
 	if user.Email == "" { //User not found!
@@ -46,7 +54,9 @@ func GetUser(u uint) *store.User {
 }
 
 func GetUserByUserIdOrEmail(uid, email string) *store.User {
-
+	if DEBUG {
+		log.Println("GetUserByUserIdOrEmail")
+	}
 	user := &store.User{}
 
 	err := store.GetDB().Table("users").Where("user_id = ?", uid).First(user).Error
@@ -64,7 +74,9 @@ func GetUserByUserIdOrEmail(uid, email string) *store.User {
 }
 
 var Facebook = func(w http.ResponseWriter, r *http.Request) {
-
+	if DEBUG {
+		log.Println("Facebook")
+	}
 	var data map[string]interface{}
 	err := json.NewDecoder(r.Body).Decode(&data) //decode the request body into struct and failed if any error occur
 	if err != nil {
@@ -84,7 +96,9 @@ var Facebook = func(w http.ResponseWriter, r *http.Request) {
 }
 
 var Authenticate = func(w http.ResponseWriter, r *http.Request) {
-
+	if DEBUG {
+		log.Println("Authenticate")
+	}
 	user := &store.User{}
 	err := json.NewDecoder(r.Body).Decode(user) //decode the request body into struct and failed if any error occur
 	if err != nil {
@@ -100,7 +114,9 @@ var Authenticate = func(w http.ResponseWriter, r *http.Request) {
 }
 
 func Logout(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("logging out")
+	if DEBUG {
+		log.Println("Logout")
+	}
 	user, err := FindUser(r)
 	if err != nil {
 		utils.Respond(w, utils.Message(false, "Invalid request"))
@@ -112,6 +128,9 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("user %s logged out\n", user.Name)
 }
 func Login(userId, password string) map[string]interface{} {
+	if DEBUG {
+		log.Println("Login")
+	}
 
 	// is user already logged in with a session?
 
@@ -125,18 +144,15 @@ func Login(userId, password string) map[string]interface{} {
 	}
 
 	// fmt.Println(user)
-
-	json.Unmarshal([]byte(user.Property), &user.Prop)
-	if user.Prop == nil {
-		user.Prop = make(map[string]string)
-		user.Prop["test"] = "success"
-	}
+	user.Revert()
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
 		return utils.Message(false, "Invalid login credentials. Please try again")
 	}
 	user.Password = ""
-
+	if DEBUG {
+		log.Println("...Password checked")
+	}
 	//Create JWT token
 	tk := &store.Token{UserId: user.ID}
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
@@ -145,14 +161,38 @@ func Login(userId, password string) map[string]interface{} {
 
 	// convertProps(account)
 
+	// remove old login stuff
+
+	oldToken := store.Online()[user.ID]
+	if oldSession, ok := store.Sessions()[oldToken]; ok {
+		oldSession.Inbox <- true
+		if DEBUG {
+			log.Println("...old session removed")
+		}
+	} // kill wsDataQueue
+	delete(store.Sessions(), oldToken)
+	delete(store.Online(), user.ID)
+	delete(store.BlitzMatches(), oldToken)
+	if DEBUG {
+		log.Println("...old blitz stuff removed")
+		log.Printf("online:\n   %v\n", store.Online())
+		log.Printf("sessions:\n   %v\n", store.Sessions())
+		log.Printf("BlitzMatches()\n   %v\n", store.BlitzMatches())
+	}
 	store.Sessions()[user.Token] = &store.Session{User: user, NumNewMoves: 0, Inbox: make(chan interface{})}
 	store.Online()[user.ID] = user.Token
 
 	resp := utils.Message(true, "Logged In")
 	resp["user"] = user
+	if DEBUG {
+		log.Println("...completed")
+	}
 	return resp
 }
 func UserInfo(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("UserInfo")
+	}
 	user, _ := FindUser(r)
 
 	if user == nil {
@@ -174,8 +214,67 @@ func UserInfo(w http.ResponseWriter, r *http.Request) {
 
 	utils.Respond(w, resp)
 }
-func RegisterUser(w http.ResponseWriter, r *http.Request) {
+func Queues(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("Queues")
+	}
+	user, _ := FindUser(r)
 
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+	messages := GetMessagesFor(user.UserId)
+	requests := GetFriendRequestsFor(user.UserId)
+	resp := utils.Message(true, "Queues")
+	resp["messages"] = convert(messages)
+	resp["requests"] = convert(requests)
+
+	utils.Respond(w, resp)
+}
+func convert(msgs []store.Message) []interface{} {
+	if DEBUG {
+		log.Println("convert")
+	}
+	data := make([]interface{}, len(msgs))
+	for m := range msgs {
+		author := GetUser(msgs[m].Author)
+		data[m] = struct {
+			ID    uint   `json:"ID"`
+			Meta  string `json:"meta"`
+			From  string `json:"from"`
+			Topic string `json:"topic"`
+			Text  string `json:"text"`
+		}{ID: msgs[m].ID, Meta: msgs[m].Meta, From: author.Name, Topic: msgs[m].Topic, Text: msgs[m].Body}
+	}
+	return data
+}
+func GetFriendRequestsFor(uId string) []store.Message {
+	if DEBUG {
+		log.Println("GetFriendRequestsFor")
+	}
+	requests := []store.Message{}
+	err := store.GetDB().Table("messages").Where("meta = ? and recipients = ?", "FriendRequest", uId).Find(&requests).Error
+	if err != nil {
+		return nil
+	}
+	return requests
+}
+func GetMessagesFor(uId string) []store.Message {
+	if DEBUG {
+		log.Println("GetMessagesFor")
+	}
+	messages := []store.Message{}
+	err := store.GetDB().Table("messages").Where("recipients LIKE ?", "%"+uId+"%").Find(&messages).Error
+	if err != nil {
+		return nil
+	}
+	return messages
+}
+func RegisterUser(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("RegisterUser")
+	}
 	user := &store.User{}
 	err := json.NewDecoder(r.Body).Decode(&user)
 
@@ -200,7 +299,9 @@ func RegisterUser(w http.ResponseWriter, r *http.Request) {
 }
 
 var JwtAuthentication = func(next http.Handler) http.Handler {
-
+	if DEBUG {
+		log.Println("JwtAuthentication")
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		notAuth := []string{"/tutor", "/user", "/match/cpu", "/pub", "/ws"} //List of endpoints that doesn't require auth
@@ -265,9 +366,141 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 	})
 }
 
-func Message(w http.ResponseWriter, r *http.Request) {
+func FriendAccept(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("FriendAccept")
+	}
+	data := &struct {
+		Id int `json:"requestId"`
+	}{}
+	err := json.NewDecoder(r.Body).Decode(data)
 
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for new friend request"))
+		return
+	}
+
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+	request := store.GetMessage(uint(data.Id))
+
+	for req := range user.Friend {
+		if user.Friend[req].ID == request.Author {
+			utils.Respond(w, utils.Message(false, "Already Friends"))
+			request.Delete()
+			return
+		}
+	}
+
+	requestor := GetUser(request.Author)
+	if requestor != nil {
+		newFriend := store.Friend{ID: requestor.ID, Name: requestor.Name, UserId: requestor.UserId, Colors: "#8bb|#466|#fda"}
+		beaFriend := store.Friend{ID: user.ID, Name: user.Name, UserId: user.UserId, Colors: "#8bb|#466|#fda"}
+
+		user.Friend = append(user.Friend, newFriend)
+		requestor.Friend = append(requestor.Friend, beaFriend)
+		user.Update()
+		requestor.Update()
+		resp := utils.Message(true, "You have a new friend.")
+		resp["friend"] = newFriend
+		request.Delete()
+		utils.Respond(w, resp)
+	} else {
+		utils.Respond(w, utils.Message(false, "user not found."))
+	}
+}
+func FriendReject(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("FriendReject")
+	}
+	data := &struct {
+		Id int `json:"requestId"`
+	}{}
+	err := json.NewDecoder(r.Body).Decode(data)
+
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for friend rejection"))
+		return
+	}
+
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+	request := store.GetMessage(uint(data.Id))
+	resp := request.Delete()
+	utils.Respond(w, resp)
+}
+func MessageOk(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("MessageOk")
+	}
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+
+	params := mux.Vars(r)
+	idStr := params["id"]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "ID not found."))
+		return
+	}
+	request := store.GetMessage(uint(id))
+	resp := request.Delete()
+	utils.Respond(w, resp)
+}
+func FriendRequest(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("FriendRequest")
+	}
+	var jsonData map[string]string
+	err := json.NewDecoder(r.Body).Decode(&jsonData)
+
+	if err != nil {
+		utils.Respond(w, utils.Message(false, "Error while decoding request body for new friend request"))
+		return
+	}
+
+	user, _ := FindUser(r)
+
+	if user == nil {
+		utils.Respond(w, utils.Message(false, "User not found."))
+		return
+	}
+	recipient := GetUserByUserIdOrEmail(jsonData["userid"], "")
+	fr := GetFriendRequestsFor(recipient.UserId)
+	for req := range fr {
+		if fr[req].Recipients == recipient.UserId {
+			utils.Respond(w, utils.Message(false, "Duplicate Friend Request"))
+			return
+		}
+	}
+	newMessage := store.Message{Meta: "FriendRequest", Author: user.ID, Body: jsonData["message"], Recipients: recipient.UserId}
+
+	newMessage.Create()
+
+	if session, ok := store.Sessions()[store.OnlineMapping[recipient.ID]]; ok {
+		session.Inbox <- newMessage
+	}
+
+	utils.Respond(w, utils.Message(true, "OK"))
+}
+func Message(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("Message")
+	}
 	msg := &struct {
+		Meta  string `json:"meta"`
 		Topic string `json:"topic"`
 		Text  string `json:"body"`
 		To    string `json:"recipient"`
@@ -286,7 +519,7 @@ func Message(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recipient := GetUserByUserIdOrEmail(msg.To, "")
-	newMessage := store.Message{Author: user.ID, Topic: msg.Topic, Body: msg.Text, Recipients: msg.To}
+	newMessage := store.Message{Meta: msg.Meta, Author: user.ID, Topic: msg.Topic, Body: msg.Text, Recipients: msg.To}
 
 	newMessage.Create()
 
@@ -294,10 +527,12 @@ func Message(w http.ResponseWriter, r *http.Request) {
 		session.Inbox <- newMessage
 	}
 
-	utils.Respond(w, utils.Message(true, "Ill let him know."))
+	utils.Respond(w, utils.Message(true, "OK"))
 }
 func SaveUser(w http.ResponseWriter, r *http.Request) {
-	// fmt.Println("Save User")
+	if DEBUG {
+		log.Println("SaveUser")
+	}
 	modUser := &store.User{}
 	err := json.NewDecoder(r.Body).Decode(modUser)
 	if err != nil {

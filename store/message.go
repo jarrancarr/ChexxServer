@@ -67,3 +67,8 @@ func (m *Message) Update() map[string]interface{} {
 	response := utils.Message(true, "Message updated")
 	return response
 }
+func (m *Message) Delete() map[string]interface{} {
+	GetDB().Delete(m)
+	response := utils.Message(true, "Message deleted")
+	return response
+}

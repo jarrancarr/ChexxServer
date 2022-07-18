@@ -28,7 +28,11 @@ type About struct {
 }
 
 type Friend struct {
-	UserId string
+	ID     uint   `json:"ID"`
+	UserId string `json:"userid"`
+	Name   string `json:"name"`
+	Colors string `json:"colors"` // online|offline|chat
+	Online bool   `json:"online" gorm"-"`
 }
 type User struct {
 	gorm.Model
@@ -43,10 +47,14 @@ type User struct {
 	SignedRequest string            `json:"signedRequest"`
 	Rank          uint32            `json:"rank"`
 	About         About             `json:"about"`
-	Friend        []string          `json:"friend" gorm:"-"`
+	Friend        []Friend          `json:"friend" gorm:"-"`
 	Friends       string            `json:"-" gorm:"friends"`
 	Hangout       []string          `json:"hangout" gorm:"-"`
 	Hangouts      string            `json:"-" gorm:"hangouts"`
+	Team          []string          `json:"team" gorm:"-"`
+	Teams         string            `json:"-" gorm:"teams"`
+	Group         []string          `json:"group" gorm:"-"`
+	Groups        string            `json:"-" gorm:"groups"`
 	// Picture       []uint8 `json:"picture"`
 }
 
@@ -122,14 +130,7 @@ func GetUser(id uint) *User {
 		u.Prop = make(map[string]string)
 		u.Prop["test"] = "success"
 	}
-	json.Unmarshal([]byte(u.Friends), &u.Friend)
-	if u.Friend == nil {
-		u.Friend = []string{}
-	}
-	json.Unmarshal([]byte(u.Hangouts), &u.Hangout)
-	if u.Hangout == nil {
-		u.Hangout = []string{"International Lounge"}
-	}
+	u.Revert()
 	return u
 }
 func (u *User) Validate() (map[string]interface{}, bool) {
@@ -153,7 +154,18 @@ func (u *User) Update() map[string]interface{} {
 	}
 
 	// convert properties
+	u.Convert()
 
+	GetDB().Save(u)
+
+	if u.ID <= 0 {
+		return utils.Message(false, "Failed to create user, connection error.")
+	}
+
+	response := utils.Message(true, "User updated")
+	return response
+}
+func (u *User) Convert() {
 	prop, err := json.Marshal(u.Prop)
 	if err == nil {
 		u.Property = string(prop)
@@ -166,13 +178,36 @@ func (u *User) Update() map[string]interface{} {
 	if err == nil {
 		u.Hangouts = string(hangouts)
 	}
-
-	GetDB().Save(u)
-
-	if u.ID <= 0 {
-		return utils.Message(false, "Failed to create user, connection error.")
+	groups, err := json.Marshal(u.Group)
+	if err == nil {
+		u.Groups = string(groups)
 	}
+	teams, err := json.Marshal(u.Team)
+	if err == nil {
+		u.Teams = string(teams)
+	}
+}
+func (u *User) Revert() {
 
-	response := utils.Message(true, "User updated")
-	return response
+	json.Unmarshal([]byte(u.Property), &u.Prop)
+	if u.Prop == nil {
+		u.Prop = make(map[string]string)
+		u.Prop["test"] = "success"
+	}
+	json.Unmarshal([]byte(u.Friends), &u.Friend)
+	if u.Friend == nil {
+		u.Friend = []Friend{}
+	}
+	json.Unmarshal([]byte(u.Hangouts), &u.Hangout)
+	if u.Hangout == nil {
+		u.Hangout = []string{"International Lounge"}
+	}
+	json.Unmarshal([]byte(u.Teams), &u.Team)
+	if u.Team == nil {
+		u.Team = []string{}
+	}
+	json.Unmarshal([]byte(u.Groups), &u.Group)
+	if u.Group == nil {
+		u.Group = []string{""}
+	}
 }
