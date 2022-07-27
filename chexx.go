@@ -32,13 +32,12 @@ func main() {
 		//                             Nd53    Nd51    Bc53    Bc55    Bd52    Kc54    Pd55    Pd44    Pe21    Pe    P*    Pc31    Pc41    Pc51    Sd43    Se1    Sc1    Sc42    Ad42    Ae2    Ac4
 		// 							   Ka52    If2    Ec2    Pf51    Pf41    Pe22    Pf    Pa33    Pa44    Pa55    Sf42    Sf1    Sa    Sb1    Sa43    Af43    Aa3    Aa42
 
-		match.White.Pieces = []string{"Kd5", "Sc43", "Pc31", "Pc41", "Pc51", "Bc42", "Ie11"}
-		match.Black.Pieces = []string{"Ka5", "Pa33", "Pa1", "Pf11", "Pf21", "Pf31", "Bd"} // , "Bb32"
+		match.White.Pieces = []string{"Kd5", "R*"}
+		match.Black.Pieces = []string{"Ka5", "Pa33", "Pa1", "Pf21", "Pf31"} // , "Bb32"
 		//match.White.Pieces = []string{"Pd55", "Pd44", "Pd33"}
 		//match.Black.Pieces = []string{"Pf21"}
 		//match.Log = []string{"blank"} // to make this blacks move
-		match.Move("##f11#", true)
-		match.Move("#c31#", true)
+		match.Move("*~b5", true)
 		//match.Move("a33v", true)
 		// match.TestAttacks("f5")
 		// match.Show("f5")

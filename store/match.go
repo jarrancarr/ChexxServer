@@ -21,7 +21,7 @@ type Type struct {
 	GameClock uint32 `json:"game"`
 	MoveClock uint32 `json:"move"`
 	Status    string `json:"status`
-	Rating    uint32 `json:"rating"`
+	Rating    uint16 `json:"rating"`
 }
 type Match struct {
 	gorm.Model
@@ -99,7 +99,7 @@ func (m *Match) Update() map[string]interface{} {
 		return resp
 	}
 
-	m.Logs = strings.Trim(strings.Join(m.Log, ":::"), " ")
+	m.Logs = strings.Trim(strings.Trim(strings.Join(m.Log, ":::"), " "), ":")
 	m.BlackArmy = strings.Join(m.Black.Pieces, " ")
 	m.WhiteArmy = strings.Join(m.White.Pieces, " ")
 	strings.Trim(strings.Replace(m.WhiteArmy, "  ", " ", -1), " ")
@@ -124,7 +124,9 @@ func GetMatch(id uint) *Match {
 	GetDB().Table("matches").Where("id = ?", id).First(m)
 
 	m.Log = strings.Split(strings.Trim(m.Logs, " "), ":::")
-
+	if m.Log[0] == "" {
+		m.Log = m.Log[1:]
+	}
 	black := strings.Split(m.BlackArmy, "|")
 	blackClock, _ := strconv.Atoi(black[1])
 	m.Black = Army{UserId: m.BlackPlayerId, Pieces: strings.Split(strings.Trim(black[0], " "), " "), Time: blackClock}
@@ -167,9 +169,10 @@ func (m *Match) Move(move string, log bool) {
 	fromTo := strings.Split(move, "~")
 	if len(fromTo) == 2 {
 		pos := []string{strings.Trim(fromTo[0], "KQIERANBPS"), strings.Trim(fromTo[1], "KQIERANBPS")}
-		//fmt.Printf("from:%s,%d to:%s,%d\nAttacks:%v\nMoves:%v", frm, utils.XY[frm], too, utils.XY[too], m.board.Attacks[utils.XY[frm]], m.board.Moves[utils.XY[too]])
+		//fmt.Printf("from:%s,%d to:%s,%d\nAttacks:%v\nMoves:%v", pos[0], utils.XY[pos[0]], pos[1], utils.XY[pos[1]], m.board.Attacks[utils.XY[pos[0]]], m.board.Moves[utils.XY[pos[0]]])
 		invalid := true
 		xy := utils.XY[pos[1]]
+		//fmt.Printf("xy:%v\n", xy)
 		for mv := range m.board.Moves[utils.XY[pos[0]]] {
 			if xy == m.board.Moves[utils.XY[pos[0]]][mv] {
 				invalid = false
@@ -316,7 +319,6 @@ func (m *Match) Move(move string, log bool) {
 	// TODO: timeout?
 	//return m.Update()
 }
-
 func (m *Match) clone(origin *Match) {
 	m.White.Pieces = make([]string, len(origin.White.Pieces))
 	m.Black.Pieces = make([]string, len(origin.Black.Pieces))
@@ -538,22 +540,22 @@ func (m *Match) AI(width, depth int, finished chan bool) *Match {
 	if len(bestNMoves) == 0 {
 		if m.WhitePlayerId > 0 && m.BlackPlayerId > 0 && m.WhitePlayerId != m.BlackPlayerId {
 			if len(m.Log)%2 == 0 { // white won
-				winner := GetUser(m.WhitePlayerId)
-				loser := GetUser(m.BlackPlayerId)
-				oldRank := winner.Rank
-				winner.Rank = (winner.Rank*24 + loser.Rank + 200) / 25
-				loser.Rank = (loser.Rank*24 + oldRank - 200) / 25
-				winner.Update()
-				loser.Update()
+				// winner := GetUser(m.WhitePlayerId)
+				// loser := GetUser(m.BlackPlayerId)
+				// oldRank := winner.Rank
+				// winner.Rank = (winner.Rank*24 + loser.Rank + 200) / 25
+				// loser.Rank = (loser.Rank*24 + oldRank - 200) / 25
+				// winner.Update()
+				// loser.Update()
 				m.Game.Status = "White Won"
 			} else {
-				winner := GetUser(m.BlackPlayerId)
-				loser := GetUser(m.WhitePlayerId)
-				oldRank := winner.Rank
-				winner.Rank = (winner.Rank*24 + loser.Rank + 200) / 25
-				loser.Rank = (loser.Rank*24 + oldRank - 200) / 25
-				winner.Update()
-				loser.Update()
+				// winner := GetUser(m.BlackPlayerId)
+				// loser := GetUser(m.WhitePlayerId)
+				// oldRank := winner.Rank
+				// winner.Rank = (winner.Rank*24 + loser.Rank + 200) / 25
+				// loser.Rank = (loser.Rank*24 + oldRank - 200) / 25
+				// winner.Update()
+				// loser.Update()
 				m.Game.Status = "Black Won"
 			}
 		}
@@ -567,11 +569,6 @@ func (match *Match) TestSwitchArms(pos int, isWhite bool) {
 	match.switchArms(pos, isWhite)
 }
 func (match *Match) switchArms(pos int, isWhite bool) {
-	if isWhite {
-		fmt.Printf("   sa(%d, white)\n", pos)
-	} else {
-		fmt.Printf("   sa(%d, black)\n", pos)
-	}
 	if isWhite {
 		for ps := range match.White.Pieces {
 			if match.White.Pieces[ps] == "S"+utils.Hex[pos] {
@@ -678,6 +675,7 @@ func (match *Match) marchFlank(leader, left int, right int) {
 	}
 }
 func (match *Match) slide(xy int, direction []int) {
+	// fmt.Printf("slide (%d, dir)", xy)
 	dirs := []int{}
 	for d := range direction {
 		dirs = append(dirs, direction[d], -direction[d])
@@ -1071,6 +1069,7 @@ func (match *Match) canEscape(king int) bool { // is any surrounding space free 
 	return false
 }
 func (match *Match) legalCheck(xy, att int) bool {
+	// fmt.Printf("legalCheck(%d, %d)", xy, att)
 	atr, _ := match.board.Occupant[xy]
 	vic, ibe := match.board.Occupant[att]
 	// fmt.Printf("*-*-*legalCheck %s:%d~%s:%d\n", atr, xy, vic, att)
@@ -1095,12 +1094,8 @@ func (match *Match) legalCheck(xy, att int) bool {
 	return !match.Pinned(xy) && ((xy-att)*(xy-att))%4 == 0 // attacks are odd for P and S
 }
 func (match *Match) Pinned(xy int) bool {
-	for pin := range match.board.Pinned {
-		if match.board.Pinned[pin] == xy {
-			return true
-		}
-	}
-	return false
+	_, pinned := match.board.Pinned[xy]
+	return pinned
 }
 
 func (match *Match) TextBoard(dat string, hex bool) {
@@ -1194,4 +1189,22 @@ func (match *Match) Examine() {
 	// fmt.Printf("Moves: %v\n", match.board.Moves)
 
 	match.TextBoard("atd", false)
+}
+
+func (match *Match) WinLoseDraw(white, how string) {
+	blackPlayer := GetUser(match.BlackPlayerId)
+	whitePlayer := GetUser(match.WhitePlayerId)
+	oldRank := blackPlayer.Rating(match.Game.Name)
+	points := 0
+	if white == "win" {
+		points = 200
+	} else if white == "lose" {
+		points = -200
+	}
+	blackPlayer.SetRating(match.Game.Name, (oldRank*24+whitePlayer.Rating(match.Game.Name)-uint16(points))/25)
+	whitePlayer.SetRating(match.Game.Name, (oldRank*24+blackPlayer.Rating(match.Game.Name)+uint16(points))/25)
+	match.Game.Status = how
+	blackPlayer.Update()
+	whitePlayer.Update()
+	match.Update()
 }

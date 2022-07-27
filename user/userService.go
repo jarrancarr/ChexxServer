@@ -151,7 +151,7 @@ func Login(userId, password string) map[string]interface{} {
 	}
 	user.Password = ""
 	if DEBUG {
-		log.Println("...Password checked")
+		log.Println("...Password checked out")
 	}
 	//Create JWT token
 	tk := &store.Token{UserId: user.ID}
@@ -159,17 +159,26 @@ func Login(userId, password string) map[string]interface{} {
 	tokenString, _ := token.SignedString([]byte(os.Getenv("token_password")))
 	user.Token = tokenString //Store the token in the response
 
+	if DEBUG {
+		log.Println("...token created")
+	}
 	// convertProps(account)
 
 	// remove old login stuff
 
 	oldToken := store.Online()[user.ID]
-	if oldSession, ok := store.Sessions()[oldToken]; ok {
-		oldSession.Inbox <- true
+	if _, ok := store.Sessions()[oldToken]; ok {
+		if DEBUG {
+			log.Println("...old session exists...")
+		}
+		// oldSession.Inbox <- true
 		if DEBUG {
 			log.Println("...old session removed")
 		}
 	} // kill wsDataQueue
+	if DEBUG {
+		log.Println("...ready to clean...")
+	}
 	delete(store.Sessions(), oldToken)
 	delete(store.Online(), user.ID)
 	delete(store.BlitzMatches(), oldToken)

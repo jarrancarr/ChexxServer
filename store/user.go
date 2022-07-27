@@ -45,7 +45,7 @@ type User struct {
 	Prop          map[string]string `json:"property" gorm:"-"`
 	Property      string            `json:"-"`
 	SignedRequest string            `json:"signedRequest"`
-	Rank          uint32            `json:"rank"`
+	Rank          string            `json:"rank"`
 	About         About             `json:"about"`
 	Friend        []Friend          `json:"friend" gorm:"-"`
 	Friends       string            `json:"-" gorm:"friends"`
@@ -99,7 +99,7 @@ func (u *User) Create() map[string]interface{} {
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
 	u.Password = string(hashedPassword)
-	u.Rank = 1000
+	u.Rank = "{}"
 
 	GetDB().Create(u)
 
@@ -209,5 +209,25 @@ func (u *User) Revert() {
 	json.Unmarshal([]byte(u.Groups), &u.Group)
 	if u.Group == nil {
 		u.Group = []string{""}
+	}
+}
+
+func (u *User) Rating(of string) uint16 {
+	rating := make(map[string]uint16)
+	json.Unmarshal([]byte(u.Rank), &rating)
+	r, ok := rating[of]
+	if ok {
+		return r
+	}
+	return 1000
+}
+func (u *User) SetRating(of string, to uint16) {
+	rating := make(map[string]uint16)
+	json.Unmarshal([]byte(u.Rank), &rating)
+	rating[of] = to
+
+	newRank, err := json.Marshal(rating)
+	if err == nil {
+		u.Rank = string(newRank)
 	}
 }

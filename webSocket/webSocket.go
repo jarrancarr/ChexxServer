@@ -14,7 +14,7 @@ import (
 	"github.com/jarrancarr/ChexxServer/store"
 )
 
-var DEBUG = false
+var DEBUG = true
 
 type WsHandler struct{}
 
@@ -54,6 +54,7 @@ func (wsh WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Epoc    int64  `json:"epoc"`
 				Message string `json:"message"`
 				Move    string `json:"move"`
+				Game    string `json:"game"`
 			}{}
 			read := bytes.NewReader(message)
 			err = json.NewDecoder(read).Decode(msg)
@@ -72,7 +73,7 @@ func (wsh WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					store.SessionMap[msg.Token].WsConn = conn
 					go wsDataQueue(msg.Token)
 				case "blitz":
-					match.StartBlitz(msg.Token)
+					match.StartBlitz(msg.Token, msg.Game)
 				case "abort-blitz":
 					match.AbortBlitz(msg.Token)
 				case "blitz-move":
@@ -106,6 +107,7 @@ func wsDataQueue(token string) {
 			}
 			switch d.(type) {
 			case bool:
+				fmt.Printf("...bye bye...")
 				live = false
 			case string:
 				pair := strings.Split(d.(string), "|||")
@@ -125,7 +127,18 @@ func wsDataQueue(token string) {
 			// 	store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"chat\":"+string(msg)+"}"))
 			case *store.Match:
 				match, _ := json.Marshal(d)
-				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"type\":\"blitz\",\"match\":"+string(match)+"}"))
+				m := d.(*store.Match)
+				white := ""
+				black := ""
+				if m.BlackPlayerId != 0 {
+					b, _ := json.Marshal(store.GetUser(m.BlackPlayerId))
+					black = string(b)
+				}
+				if m.WhitePlayerId != 0 {
+					w, _ := json.Marshal(store.GetUser(m.WhitePlayerId))
+					white = string(w)
+				}
+				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"type\":\"blitz\",\"white\":"+white+",\"black\":"+black+",\"match\":"+string(match)+"}"))
 				//case bool:
 				// quit out
 			case store.Message:

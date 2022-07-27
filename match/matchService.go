@@ -16,7 +16,7 @@ import (
 	"github.com/jarrancarr/ChexxServer/utils"
 )
 
-var DEBUG = true
+var DEBUG = false
 
 func Matches(w http.ResponseWriter, r *http.Request) {
 	if DEBUG {
@@ -162,22 +162,22 @@ func CreateMatch(w http.ResponseWriter, r *http.Request) {
 	}
 	switch jsonData["dpm"] {
 	case "2":
-		match.Game = store.Type{Name: "2 day", GameClock: 3600 * 48, MoveClock: 0, Status: "open", Rating: user.Rank}
+		match.Game = store.Type{Name: "2-Day/Move", GameClock: 3600 * 48, MoveClock: 0, Status: "open", Rating: user.Rating("2-Day/Move")}
 		break
 	case "3":
-		match.Game = store.Type{Name: "3 day", GameClock: 3600 * 72, MoveClock: 0, Status: "open", Rating: user.Rank}
+		match.Game = store.Type{Name: "3-Day/Move", GameClock: 3600 * 72, MoveClock: 0, Status: "open", Rating: user.Rating("3-Day/Move")}
 		break
 	case "5":
-		match.Game = store.Type{Name: "5 day", GameClock: 3600 * 120, MoveClock: 0, Status: "open", Rating: user.Rank}
+		match.Game = store.Type{Name: "5-Day/Move", GameClock: 3600 * 120, MoveClock: 0, Status: "open", Rating: user.Rating("5-Day/Move")}
 		break
 	case "7":
-		match.Game = store.Type{Name: "7 day", GameClock: 3600 * 168, MoveClock: 0, Status: "open", Rating: user.Rank}
+		match.Game = store.Type{Name: "7-Day/Move", GameClock: 3600 * 168, MoveClock: 0, Status: "open", Rating: user.Rating("7-Day/Move")}
 		break
 	case "10":
-		match.Game = store.Type{Name: "10 day", GameClock: 3600 * 240, MoveClock: 0, Status: "open", Rating: user.Rank}
+		match.Game = store.Type{Name: "10-Day/Move", GameClock: 3600 * 240, MoveClock: 0, Status: "open", Rating: user.Rating("10-Day/Move")}
 		break
 	case "14":
-		match.Game = store.Type{Name: "14 day", GameClock: 3600 * 336, MoveClock: 0, Status: "open", Rating: user.Rank}
+		match.Game = store.Type{Name: "14-Day/Move", GameClock: 3600 * 336, MoveClock: 0, Status: "open", Rating: user.Rating("14-Day/Move")}
 		break
 	}
 	match.White.Pieces = []string{"Rd54", "Rd5", "Rc52", "Nd53", "Nd51", "Nc33", "Bc53", "Bc55", "Bd52", "Qd41", "Kc44", "Id31", "Ed4", "Pd55", "Pd44", "Pd33", "Pd21", "Pc22", "Pc31", "Pc41", "Pc51", "Sd43", "Sd32", "Sd2", "Sc32", "Sc42", "Ad42", "Ad3", "Ac43"}
@@ -206,26 +206,14 @@ func ResignMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), ":::"))%2 == 0 { // white turn
-		winner := store.GetUser(m.BlackPlayerId)
-		oldRank := winner.Rank
-		winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
-		user.Rank = (user.Rank*24 + oldRank - 200) / 25
-		winner.Update()
-		user.Update()
-		m.Game.Status = "White Resigns"
+		m.WinLoseDraw("lost", "White Resigns")
 	} else {
-		winner := store.GetUser(m.WhitePlayerId)
-		oldRank := winner.Rank
-		winner.Rank = (winner.Rank*24 + user.Rank + 200) / 25
-		user.Rank = (user.Rank*24 + oldRank - 200) / 25
-		winner.Update()
-		user.Update()
-		m.Game.Status = "Black Resigns"
+		m.WinLoseDraw("won", "Black Resigns")
 	}
 
 	resp := m.Update()
 
-	resp["rank"] = fmt.Sprintf("Your new rating is %d", user.Rank)
+	resp["rank"] = fmt.Sprintf("Your new rating is %d", user.Rating(m.Game.Name))
 
 	utils.Respond(w, resp)
 }
@@ -248,37 +236,15 @@ func DrawMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), " "))%2 == 0 { // white turn
-		if m.Game.Status == "Draw Offered" {
-			winner := store.GetUser(m.BlackPlayerId)
-			oldRank := winner.Rank
-			winner.Rank = (winner.Rank*24 + user.Rank) / 25
-			user.Rank = (user.Rank*24 + oldRank) / 25
-			winner.Update()
-			user.Update()
-			m.Game.Status = "Draw"
-			m.Update()
-		} else {
-			m.Game.Status = "Draw Offered"
-		}
+	if m.Game.Status == "Draw Offered" {
+		m.WinLoseDraw("draw", "Draw")
 	} else {
-		if m.Game.Status == "Draw Offered" {
-			winner := store.GetUser(m.WhitePlayerId)
-			oldRank := winner.Rank
-			winner.Rank = (winner.Rank*24 + user.Rank) / 25
-			user.Rank = (user.Rank*24 + oldRank) / 25
-			winner.Update()
-			user.Update()
-			m.Game.Status = "Draw"
-			m.Update()
-		} else {
-			m.Game.Status = "Draw Offered"
-		}
+		m.Game.Status = "Draw Offered"
 	}
 
 	resp := m.Update()
 
-	resp["rank"] = fmt.Sprintf("Your new rating is %d", user.Rank)
+	resp["rank"] = fmt.Sprintf("Your new rating is %d", user.Rating(m.Game.Name))
 
 	utils.Respond(w, resp)
 }
@@ -335,7 +301,7 @@ func MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// is it your move?
-	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), " "))%2 == 0 { // white turn
+	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), ":::"))%2 == 0 { // white turn
 		if m.WhitePlayerId != user.ID {
 			utils.Respond(w, utils.Message(false, "Not your turn, dumbass."))
 			return
@@ -413,7 +379,7 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store.GetDB().Table("matches").Where("white_player_id = ? OR black_player_id = ?", user.ID, user.ID).Find(&matches)
-	store.GetDB().Table("matches").Where("white_player_id != ? AND black_player_id != ? AND status='open' AND (rating>=? AND rating <=?) ", user.ID, user.ID, user.Rank-200, user.Rank+200).Find(&open)
+	store.GetDB().Table("matches").Where("white_player_id != ? AND black_player_id != ? AND status='open'", user.ID, user.ID).Find(&open)
 
 	savedMatches := make([][]string, 0)
 	myOpenMatches := make([][]string, 0)
@@ -428,7 +394,7 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 			if matches[m].Game.Status == "open" {
 				myOpenMatches = append(myOpenMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
 			} else if matches[m].Game.Status == "engaged" {
-				if matches[m].Logs == "" || len(strings.Split(strings.Trim(matches[m].Logs, " "), " "))%2 == 0 { // white turn
+				if matches[m].Logs == "" || len(strings.Split(strings.Trim(matches[m].Logs, " "), ":::"))%2 == 0 { // white turn
 					if matches[m].WhitePlayerId == user.ID {
 						readyMatches = append(readyMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
 					} else {
@@ -460,27 +426,49 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 
 	utils.Respond(w, resp)
 }
-func StartBlitz(token string) {
+func StartBlitz(token, game string) {
 	if DEBUG {
 		log.Println("StartBlitz")
+	}
+	gameLength := 0
+	moveLength := 0
+	switch game {
+	case "3/900":
+		gameLength = 900
+		moveLength = 3
+	case "5/600":
+		gameLength = 600
+		moveLength = 5
+	case "15/360":
+		gameLength = 360
+		moveLength = 15
+	case "10/60":
+		gameLength = 60
+		moveLength = 10
+	case "720":
+		gameLength = 720
+	case "1500":
+		gameLength = 1500
 	}
 	user := store.Sessions()[token].User
 	delete(store.BlitzMatches(), token)
 	for tk, mtch := range store.BlitzMap {
-		if store.Sessions()[tk].User.Rank > user.Rank-200 && store.Sessions()[tk].User.Rank < user.Rank+200 {
-			store.BlitzMap[token] = mtch
-			mtch.BlackPlayerId = store.Sessions()[token].User.ID
-			mtch.Black.UserId = mtch.BlackPlayerId
-			mtch.CreatedAt = time.Now()
-			mtch.UpdatedAt = time.Now()
-			store.Sessions()[tk].Inbox <- mtch
-			store.Sessions()[token].Inbox <- mtch
-			return
+		if mtch.Game.GameClock == uint32(gameLength) && mtch.Game.MoveClock == uint32(moveLength) {
+			if store.Sessions()[tk].User.Rating(game) > user.Rating(game)-200 && store.Sessions()[tk].User.Rating(game) < user.Rating(game)+200 {
+				store.BlitzMap[token] = mtch
+				mtch.BlackPlayerId = store.Sessions()[token].User.ID
+				mtch.Black.UserId = mtch.BlackPlayerId
+				mtch.CreatedAt = time.Now()
+				mtch.UpdatedAt = time.Now()
+				store.Sessions()[tk].Inbox <- mtch
+				store.Sessions()[token].Inbox <- mtch
+				return
+			}
 		}
 	}
-	blitz := store.Match{Title: "Blitz", Log: []string{}, WhitePlayerId: user.ID, Game: store.Type{Name: "Blitz", GameClock: 60, MoveClock: 10, Status: "Waiting"},
-		White: store.Army{UserId: user.ID, Pieces: []string{"Kc44", "Qd41", "Id31", "Ed4", "Rd54", "Rd5", "Rc52", "Nd53", "Nd51", "Nc33", "Bc53", "Bc55", "Bd52", "Ad42", "Ad3", "Ac43", "Pd55", "Pd44", "Pd33", "Pd21", "Pc22", "Pc31", "Pc41", "Pc51", "Sd43", "Sd32", "Sd2", "Sc32", "Sc42"}, Time: 60},
-		Black: store.Army{UserId: 0, Pieces: []string{"Ka41", "Qf44", "If33", "Ea4", "Ra5", "Rf52", "Ra54", "Nf53", "Nf55", "Na31", "Ba53", "Ba51", "Bf54", "Af43", "Aa3", "Aa42", "Pf51", "Pf41", "Pf31", "Pf22", "Pa21", "Pa33", "Pa44", "Pa55", "Sf42", "Sf32", "Sa2", "Sa32", "Sa43"}, Time: 60}}
+	blitz := store.Match{Title: "Blitz", Log: []string{}, WhitePlayerId: user.ID, Game: store.Type{Name: "Blitz", GameClock: uint32(gameLength), MoveClock: uint32(moveLength), Status: "Waiting"},
+		White: store.Army{UserId: user.ID, Pieces: []string{"Kc44", "Qd41", "Id31", "Ed4", "Rd54", "Rd5", "Rc52", "Nd53", "Nd51", "Nc33", "Bc53", "Bc55", "Bd52", "Ad42", "Ad3", "Ac43", "Pd55", "Pd44", "Pd33", "Pd21", "Pc22", "Pc31", "Pc41", "Pc51", "Sd43", "Sd32", "Sd2", "Sc32", "Sc42"}, Time: gameLength},
+		Black: store.Army{UserId: 0, Pieces: []string{"Ka41", "Qf44", "If33", "Ea4", "Ra5", "Rf52", "Ra54", "Nf53", "Nf55", "Na31", "Ba53", "Ba51", "Bf54", "Af43", "Aa3", "Aa42", "Pf51", "Pf41", "Pf31", "Pf22", "Pa21", "Pa33", "Pa44", "Pa55", "Sf42", "Sf32", "Sa2", "Sa32", "Sa43"}, Time: gameLength}}
 
 	store.BlitzMatches()[token] = &blitz
 }
@@ -506,16 +494,9 @@ func BlitzMove(token, move string) {
 	if len(blitz.Log)%2 == 0 { // white
 		if elapsed.Seconds() > float64(blitz.White.Time+int(blitz.Game.MoveClock)) {
 			// lost on time
-			blackPlayer := store.GetUser(blitz.BlackPlayerId)
-			whitePlayer := store.GetUser(blitz.WhitePlayerId)
-			oldRank := blackPlayer.Rank
-			blackPlayer.Rank = (blackPlayer.Rank*24 + whitePlayer.Rank + 200) / 25
-			whitePlayer.Rank = (whitePlayer.Rank*24 + oldRank - 200) / 25
-			blitz.Game.Status = "White Lost on Time"
-			blackPlayer.Update()
-			whitePlayer.Update()
-			store.Sessions()[store.Online()[blitz.WhitePlayerId]].Inbox <- fmt.Sprintf("type||loss|||info||%s|||rating||%d", blitz.Game.Status, whitePlayer.Rank)
-			store.Sessions()[store.Online()[blitz.BlackPlayerId]].Inbox <- fmt.Sprintf("type||win|||info||%s|||rating||%d", blitz.Game.Status, blackPlayer.Rank)
+			blitz.WinLoseDraw("lose", "White Lost on Time")
+			store.Sessions()[store.Online()[blitz.WhitePlayerId]].Inbox <- fmt.Sprintf("type||loss|||info||%s|||rating||%d", blitz.Game.Status, store.GetUser(blitz.WhitePlayerId).Rating(blitz.Game.Name))
+			store.Sessions()[store.Online()[blitz.BlackPlayerId]].Inbox <- fmt.Sprintf("type||win|||info||%s|||rating||%d", blitz.Game.Status, store.GetUser(blitz.BlackPlayerId).Rating(blitz.Game.Name))
 			delete(store.BlitzMatches(), store.Online()[blitz.WhitePlayerId])
 			delete(store.BlitzMatches(), store.Online()[blitz.BlackPlayerId])
 			return
@@ -529,16 +510,9 @@ func BlitzMove(token, move string) {
 	} else { // black
 		if elapsed.Seconds() > float64(blitz.Black.Time+int(blitz.Game.MoveClock)) {
 			// lost on time
-			blackPlayer := store.GetUser(blitz.BlackPlayerId)
-			whitePlayer := store.GetUser(blitz.WhitePlayerId)
-			oldRank := blackPlayer.Rank
-			blackPlayer.Rank = (blackPlayer.Rank*24 + whitePlayer.Rank - 200) / 25
-			whitePlayer.Rank = (whitePlayer.Rank*24 + oldRank + 200) / 25
-			blitz.Game.Status = "Black Lost on Time"
-			blackPlayer.Update()
-			whitePlayer.Update()
-			store.Sessions()[store.Online()[blitz.WhitePlayerId]].Inbox <- fmt.Sprintf("type||win|||info||%s|||rating||%d", blitz.Game.Status, whitePlayer.Rank)
-			store.Sessions()[store.Online()[blitz.BlackPlayerId]].Inbox <- fmt.Sprintf("type||loss|||info||%s|||rating||%d", blitz.Game.Status, blackPlayer.Rank)
+			blitz.WinLoseDraw("win", "Black Lost on Time")
+			store.Sessions()[store.Online()[blitz.WhitePlayerId]].Inbox <- fmt.Sprintf("type||win|||info||%s|||rating||%d", blitz.Game.Status, store.GetUser(blitz.WhitePlayerId).Rating(blitz.Game.Name))
+			store.Sessions()[store.Online()[blitz.BlackPlayerId]].Inbox <- fmt.Sprintf("type||loss|||info||%s|||rating||%d", blitz.Game.Status, store.GetUser(blitz.BlackPlayerId).Rating(blitz.Game.Name))
 			delete(store.BlitzMatches(), store.Online()[blitz.WhitePlayerId])
 			delete(store.BlitzMatches(), store.Online()[blitz.BlackPlayerId])
 			return
@@ -551,8 +525,7 @@ func BlitzMove(token, move string) {
 		}
 	}
 	blitz.UpdatedAt = time.Now()
-	blitz.Move(move, true)
-	log.Printf("   clock: %d,%d\n", blitz.White.Time, blitz.Black.Time)
+	blitz.Move(strings.Replace(move, "x", "~", 1), true)
 	yourturn := blitz.BlackPlayerId
 	if len(blitz.Log)%2 == 0 {
 		yourturn = blitz.WhitePlayerId
@@ -576,29 +549,20 @@ func BlitzEnd(token, reason string) {
 		delete(store.BlitzMatches(), token)
 		return
 	}
-	oldRank := blackPlayer.Rank
 	blackType := "win"
 	whiteType := "loss"
-	if store.Online()[blitz.WhitePlayerId] == token { // white resigned
-		blackPlayer.Rank = (blackPlayer.Rank*24 + whitePlayer.Rank + 200) / 25
-		whitePlayer.Rank = (whitePlayer.Rank*24 + oldRank - 200) / 25
-		blitz.Game.Status = "White " + reason
+	if store.Online()[blitz.WhitePlayerId] == token {
+		blitz.WinLoseDraw("won", "White "+reason)
 	} else if store.Online()[blitz.BlackPlayerId] == token {
-		whiteType = "win"
+		blitz.WinLoseDraw("lost", "Black "+reason)
 		blackType = "loss"
-		oldRank := whitePlayer.Rank
-		blackPlayer.Rank = (blackPlayer.Rank*24 + whitePlayer.Rank - 200) / 25
-		whitePlayer.Rank = (whitePlayer.Rank*24 + oldRank + 200) / 25
-		blitz.Game.Status = "Black " + reason
+		whiteType = "win"
 	} else {
 		// this shouldn't be the case.... hacking?
 		return
 	}
-	blackPlayer.Update()
-	whitePlayer.Update()
-
-	store.Sessions()[store.Online()[blitz.WhitePlayerId]].Inbox <- fmt.Sprintf("type||%s|||info||%s|||rating||%d", whiteType, blitz.Game.Status, whitePlayer.Rank)
-	store.Sessions()[store.Online()[blitz.BlackPlayerId]].Inbox <- fmt.Sprintf("type||%s|||info||%s|||rating||%d", blackType, blitz.Game.Status, blackPlayer.Rank)
+	store.Sessions()[store.Online()[blitz.WhitePlayerId]].Inbox <- fmt.Sprintf("type||%s|||info||%s|||rating||%d", whiteType, blitz.Game.Status, whitePlayer.Rating(blitz.Game.Name))
+	store.Sessions()[store.Online()[blitz.BlackPlayerId]].Inbox <- fmt.Sprintf("type||%s|||info||%s|||rating||%d", blackType, blitz.Game.Status, blackPlayer.Rating(blitz.Game.Name))
 	delete(store.BlitzMatches(), store.Online()[blitz.WhitePlayerId])
 	delete(store.BlitzMatches(), store.Online()[blitz.BlackPlayerId])
 }
