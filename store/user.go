@@ -2,6 +2,8 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"os"
 
 	"github.com/golang-jwt/jwt"
@@ -69,6 +71,8 @@ type Session struct {
 	Inbox  chan interface{}
 }
 
+var DEBUG = true
+
 var SessionMap map[string]*Session // map of tokens to sessions
 var OnlineMapping map[uint]string  // map of ids to tokens
 
@@ -83,7 +87,7 @@ func Online() map[uint]string {
 		OnlineMapping = make(map[uint]string)
 	}
 	return OnlineMapping
-}
+} // map of user ids to tokens
 
 type Team struct {
 	gorm.Model
@@ -119,16 +123,13 @@ func (u *User) Create() map[string]interface{} {
 	return response
 }
 func GetUser(id uint) *User {
-
+	if DEBUG {
+		log.Printf("GetUser(%d)\n", id)
+	}
 	u := &User{}
 	GetDB().Table("users").Where("id = ?", id).First(u)
 	if u.Name == "" || u.Email == "" { //User not found!
 		return nil
-	}
-	json.Unmarshal([]byte(u.Property), &u.Prop)
-	if u.Prop == nil {
-		u.Prop = make(map[string]string)
-		u.Prop["test"] = "success"
 	}
 	u.Revert()
 	return u
@@ -188,30 +189,60 @@ func (u *User) Convert() {
 	}
 }
 func (u *User) Revert() {
-
+	if DEBUG {
+		log.Printf("Revert")
+	}
 	json.Unmarshal([]byte(u.Property), &u.Prop)
 	if u.Prop == nil {
 		u.Prop = make(map[string]string)
 		u.Prop["test"] = "success"
 	}
+	if DEBUG {
+		log.Printf("..props")
+	}
 	json.Unmarshal([]byte(u.Friends), &u.Friend)
 	if u.Friend == nil {
 		u.Friend = []Friend{}
+	}
+	if DEBUG {
+		log.Printf("..friends")
 	}
 	json.Unmarshal([]byte(u.Hangouts), &u.Hangout)
 	if u.Hangout == nil {
 		u.Hangout = []string{"International Lounge"}
 	}
+	if DEBUG {
+		log.Printf("..hangouts")
+	}
 	json.Unmarshal([]byte(u.Teams), &u.Team)
 	if u.Team == nil {
 		u.Team = []string{}
+	}
+	if DEBUG {
+		log.Printf("..teams")
 	}
 	json.Unmarshal([]byte(u.Groups), &u.Group)
 	if u.Group == nil {
 		u.Group = []string{""}
 	}
+	if DEBUG {
+		log.Printf("..groups\n")
+	}
 }
-
+func (u *User) Signal() {
+	for f := range u.Friend {
+		if DEBUG {
+			log.Printf("..signaling friend(%s)", u.Friend[f].UserId)
+		}
+		if friendToken, ok := Online()[u.Friend[f].ID]; ok {
+			if DEBUG {
+				log.Printf("..online")
+			}
+			u.Friend[f].Online = true
+			Sessions()[friendToken].Inbox <- fmt.Sprintf("type||online|||friend||%s", u.UserId)
+		}
+	}
+}
 func (u *User) Rating(of string) uint16 {
 	rating := make(map[string]uint16)
 	json.Unmarshal([]byte(u.Rank), &rating)

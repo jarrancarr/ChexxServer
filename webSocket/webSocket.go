@@ -103,13 +103,16 @@ func wsDataQueue(token string) {
 			}
 			d := <-store.SessionMap[token].Inbox
 			if DEBUG {
-				log.Printf("......wsDataQueue input: %v\n", d)
+				log.Printf("......wsDataQueue input")
 			}
 			switch d.(type) {
 			case bool:
 				fmt.Printf("...bye bye...")
 				live = false
 			case string:
+				if DEBUG {
+					log.Printf("......wsDataQueue string: %v\n", d)
+				}
 				pair := strings.Split(d.(string), "|||")
 				packet := "{"
 				for i := 0; i < len(pair); i += 1 {
@@ -126,7 +129,13 @@ func wsDataQueue(token string) {
 			// 	msg, _ := json.Marshal(d)
 			// 	store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"chat\":"+string(msg)+"}"))
 			case *store.Match:
+				if DEBUG {
+					log.Printf("   queue processing match...")
+				}
 				match, _ := json.Marshal(d)
+				if DEBUG {
+					log.Printf("1...")
+				}
 				m := d.(*store.Match)
 				white := ""
 				black := ""
@@ -138,7 +147,13 @@ func wsDataQueue(token string) {
 					w, _ := json.Marshal(store.GetUser(m.WhitePlayerId))
 					white = string(w)
 				}
+				if DEBUG {
+					log.Printf("2...")
+				}
 				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"type\":\"blitz\",\"white\":"+white+",\"black\":"+black+",\"match\":"+string(match)+"}"))
+				if DEBUG {
+					log.Printf("processed\n")
+				}
 				//case bool:
 				// quit out
 			case store.Message:

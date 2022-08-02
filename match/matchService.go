@@ -16,7 +16,7 @@ import (
 	"github.com/jarrancarr/ChexxServer/utils"
 )
 
-var DEBUG = false
+var DEBUG = true
 
 func Matches(w http.ResponseWriter, r *http.Request) {
 	if DEBUG {
@@ -451,10 +451,20 @@ func StartBlitz(token, game string) {
 		gameLength = 1500
 	}
 	user := store.Sessions()[token].User
-	delete(store.BlitzMatches(), token)
+	//delete(store.BlitzMatches(), token)
 	for tk, mtch := range store.BlitzMap {
+		if DEBUG {
+			log.Printf("   tk:%v\n    match:%v\n", tk, mtch)
+		}
 		if mtch.Game.GameClock == uint32(gameLength) && mtch.Game.MoveClock == uint32(moveLength) {
+			if DEBUG {
+				log.Printf("      same game type\n")
+				log.Printf("      ratings: %d vs %d\n", user.Rating(game), store.Sessions()[tk].User.Rating(game))
+			}
 			if store.Sessions()[tk].User.Rating(game) > user.Rating(game)-200 && store.Sessions()[tk].User.Rating(game) < user.Rating(game)+200 {
+				if DEBUG {
+					log.Printf("         acceptable rankings\n")
+				}
 				store.BlitzMap[token] = mtch
 				mtch.BlackPlayerId = store.Sessions()[token].User.ID
 				mtch.Black.UserId = mtch.BlackPlayerId

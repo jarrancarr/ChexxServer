@@ -122,6 +122,14 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		utils.Respond(w, utils.Message(false, "Invalid request"))
 		return
 	}
+
+	for f := range user.Friend {
+		if friendToken, ok := store.Online()[user.Friend[f].ID]; ok {
+			user.Friend[f].Online = true
+			store.Sessions()[friendToken].Inbox <- fmt.Sprintf("type||offline|||friend||%s", user.UserId)
+		}
+	}
+
 	delete(store.Sessions(), user.Token)
 	delete(store.Online(), user.ID)
 	utils.Respond(w, utils.Message(true, "Logged Out"))
@@ -132,7 +140,7 @@ func Login(userId, password string) map[string]interface{} {
 		log.Println("Login")
 	}
 
-	// is user already logged in with a session?
+	// TODO: is user already logged in with a session?
 
 	user := &store.User{}
 	err := store.GetDB().Table("users").Where("user_id = ?", userId).First(user).Error
@@ -196,6 +204,7 @@ func Login(userId, password string) map[string]interface{} {
 	if DEBUG {
 		log.Println("...completed")
 	}
+	user.Signal()
 	return resp
 }
 func UserInfo(w http.ResponseWriter, r *http.Request) {
