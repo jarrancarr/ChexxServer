@@ -14,7 +14,7 @@ import (
 	"github.com/jarrancarr/ChexxServer/store"
 )
 
-var DEBUG = true
+var DEBUG = false
 
 type WsHandler struct{}
 
@@ -150,7 +150,11 @@ func wsDataQueue(token string) {
 				if DEBUG {
 					log.Printf("2...")
 				}
-				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"type\":\"blitz\",\"white\":"+white+",\"black\":"+black+",\"match\":"+string(match)+"}"))
+				gameType := "view"
+				if store.Online()[m.BlackPlayerId] == token || store.Online()[m.WhitePlayerId] == token {
+					gameType = "blitz"
+				}
+				store.SessionMap[token].WsConn.WriteMessage(1, []byte("{\"type\":\""+gameType+"\",\"white\":"+white+",\"black\":"+black+",\"match\":"+string(match)+"}"))
 				if DEBUG {
 					log.Printf("processed\n")
 				}

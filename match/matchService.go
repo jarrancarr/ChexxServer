@@ -16,7 +16,7 @@ import (
 	"github.com/jarrancarr/ChexxServer/utils"
 )
 
-var DEBUG = true
+var DEBUG = false
 
 func Matches(w http.ResponseWriter, r *http.Request) {
 	if DEBUG {
@@ -206,9 +206,9 @@ func ResignMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if m.Logs == "" || len(strings.Split(strings.Trim(m.Logs, " "), ":::"))%2 == 0 { // white turn
-		m.WinLoseDraw("lost", "White Resigns")
+		m.WinLoseDraw("lose", "White Resigns")
 	} else {
-		m.WinLoseDraw("won", "Black Resigns")
+		m.WinLoseDraw("win", "Black Resigns")
 	}
 
 	resp := m.Update()
@@ -389,31 +389,31 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 	finishedMatches := make([][]string, 0)
 	for m := range matches {
 		if matches[m].BlackPlayerId == user.ID && matches[m].WhitePlayerId == user.ID {
-			savedMatches = append(savedMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+			savedMatches = append(savedMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 		} else if matches[m].BlackPlayerId == user.ID || matches[m].WhitePlayerId == user.ID { // so only one player is user
 			if matches[m].Game.Status == "open" {
-				myOpenMatches = append(myOpenMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+				myOpenMatches = append(myOpenMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 			} else if matches[m].Game.Status == "engaged" {
 				if matches[m].Logs == "" || len(strings.Split(strings.Trim(matches[m].Logs, " "), ":::"))%2 == 0 { // white turn
 					if matches[m].WhitePlayerId == user.ID {
-						readyMatches = append(readyMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+						readyMatches = append(readyMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 					} else {
-						waitingMatches = append(waitingMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+						waitingMatches = append(waitingMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 					}
 				} else { // black turn
 					if matches[m].BlackPlayerId == user.ID {
-						readyMatches = append(readyMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+						readyMatches = append(readyMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 					} else {
-						waitingMatches = append(waitingMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+						waitingMatches = append(waitingMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 					}
 				}
 			} else if matches[m].Game.Status == "White Won" || matches[m].Game.Status == "Black Won" {
-				finishedMatches = append(finishedMatches, []string{fmt.Sprintf(".%s.:%d", matches[m].Title, matches[m].ID), ""})
+				finishedMatches = append(finishedMatches, []string{fmt.Sprintf("%s:%d", matches[m].Title, matches[m].ID), ""})
 			}
 		}
 	}
 	for m := range open {
-		openMatches = append(openMatches, []string{fmt.Sprintf(".%s.:%d:%d", open[m].Title, open[m].ID, open[m].Game.Rating), ""})
+		openMatches = append(openMatches, []string{fmt.Sprintf("%s:%d:%d", open[m].Title, open[m].ID, open[m].Game.Rating), ""})
 	}
 	resp := utils.Message(true, "Found matches")
 	resp["savedMatches"] = savedMatches
@@ -425,6 +425,22 @@ func ListMatches(w http.ResponseWriter, r *http.Request) {
 	// resp["defeat"] = openMatches
 
 	utils.Respond(w, resp)
+}
+
+func LiveMatches(w http.ResponseWriter, r *http.Request) {
+	if DEBUG {
+		log.Println("LiveMatches")
+	}
+
+	user, _ := user.FindUser(r)
+
+	for tk, mtch := range store.BlitzMatches() {
+		if store.Online()[mtch.WhitePlayerId] == tk {
+			store.Sessions()[user.Token].Inbox <- mtch
+		}
+	}
+
+	utils.Respond(w, utils.Message(true, "Sending Live streams."))
 }
 func StartBlitz(token, game string) {
 	if DEBUG {
@@ -452,11 +468,11 @@ func StartBlitz(token, game string) {
 	}
 	user := store.Sessions()[token].User
 	//delete(store.BlitzMatches(), token)
-	for tk, mtch := range store.BlitzMap {
+	for tk, mtch := range store.BlitzMatches() {
 		if DEBUG {
 			log.Printf("   tk:%v\n    match:%v\n", tk, mtch)
 		}
-		if mtch.Game.GameClock == uint32(gameLength) && mtch.Game.MoveClock == uint32(moveLength) {
+		if mtch.BlackPlayerId == 0 && mtch.Game.GameClock == uint32(gameLength) && mtch.Game.MoveClock == uint32(moveLength) {
 			if DEBUG {
 				log.Printf("      same game type\n")
 				log.Printf("      ratings: %d vs %d\n", user.Rating(game), store.Sessions()[tk].User.Rating(game))
@@ -466,17 +482,18 @@ func StartBlitz(token, game string) {
 					log.Printf("         acceptable rankings\n")
 				}
 				store.BlitzMap[token] = mtch
-				mtch.BlackPlayerId = store.Sessions()[token].User.ID
+				mtch.BlackPlayerId = user.ID
 				mtch.Black.UserId = mtch.BlackPlayerId
 				mtch.CreatedAt = time.Now()
 				mtch.UpdatedAt = time.Now()
+				mtch.Title = mtch.Title + user.UserId
 				store.Sessions()[tk].Inbox <- mtch
 				store.Sessions()[token].Inbox <- mtch
 				return
 			}
 		}
 	}
-	blitz := store.Match{Title: "Blitz", Log: []string{}, WhitePlayerId: user.ID, Game: store.Type{Name: "Blitz", GameClock: uint32(gameLength), MoveClock: uint32(moveLength), Status: "Waiting"},
+	blitz := store.Match{Title: user.UserId + ":", Log: []string{}, WhitePlayerId: user.ID, Game: store.Type{Name: fmt.Sprintf("Blitz-%d%d", moveLength, gameLength), GameClock: uint32(gameLength), MoveClock: uint32(moveLength), Status: "Waiting"},
 		White: store.Army{UserId: user.ID, Pieces: []string{"Kc44", "Qd41", "Id31", "Ed4", "Rd54", "Rd5", "Rc52", "Nd53", "Nd51", "Nc33", "Bc53", "Bc55", "Bd52", "Ad42", "Ad3", "Ac43", "Pd55", "Pd44", "Pd33", "Pd21", "Pc22", "Pc31", "Pc41", "Pc51", "Sd43", "Sd32", "Sd2", "Sc32", "Sc42"}, Time: gameLength},
 		Black: store.Army{UserId: 0, Pieces: []string{"Ka41", "Qf44", "If33", "Ea4", "Ra5", "Rf52", "Ra54", "Nf53", "Nf55", "Na31", "Ba53", "Ba51", "Bf54", "Af43", "Aa3", "Aa42", "Pf51", "Pf41", "Pf31", "Pf22", "Pa21", "Pa33", "Pa44", "Pa55", "Sf42", "Sf32", "Sa2", "Sa32", "Sa43"}, Time: gameLength}}
 
@@ -545,7 +562,7 @@ func BlitzMove(token, move string) {
 }
 func BlitzEnd(token, reason string) {
 	if DEBUG {
-		log.Printf("BlitzTimeout (%s)\n", token)
+		log.Printf("BlitzEnd (%s)\n", token)
 	}
 	//user := store.Sessions()[token].User
 	blitz := store.BlitzMatches()[token]
@@ -562,9 +579,9 @@ func BlitzEnd(token, reason string) {
 	blackType := "win"
 	whiteType := "loss"
 	if store.Online()[blitz.WhitePlayerId] == token {
-		blitz.WinLoseDraw("won", "White "+reason)
+		blitz.WinLoseDraw("win", "White "+reason)
 	} else if store.Online()[blitz.BlackPlayerId] == token {
-		blitz.WinLoseDraw("lost", "Black "+reason)
+		blitz.WinLoseDraw("lose", "Black "+reason)
 		blackType = "loss"
 		whiteType = "win"
 	} else {

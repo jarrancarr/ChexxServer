@@ -25,19 +25,19 @@ func main() {
 	if debug {
 		fmt.Println("running test")
 		//store.DoTest()
-		match := &store.Match{}
+		match := &store.Match{WhitePlayerId: 3, BlackPlayerId: 4, Game: store.Type{Name: "Test"}}
 		//match.White.Pieces = []string{"Kc44", "Qd41", "Id31", "Ed4", "Rd54", "Rd5", "Rc52", "Nd53", "Nd51", "Nc33", "Bc53", "Bc55", "Bd52", "Ad42", "Ad3", "Ac43", "Pd55", "Pd44", "Pd33", "Pd21", "Pc22", "Pc31", "Pc41", "Pc51", "Sd43", "Sd32", "Sd2", "Sc32", "Sc42"}
 		//match.Black.Pieces = []string{"Ka41", "Qf44", "If33", "Ea4", "Ra5", "Rf52", "Ra54", "Nf53", "Nf55", "Na31", "Ba53", "Ba51", "Bf54", "Af43", "Aa3", "Aa42", "Pf51", "Pf41", "Pf31", "Pf22", "Pa21", "Pa33", "Pa44", "Pa55", "Sf42", "Sf32", "Sa2", "Sa32", "Sa43"}
 
 		//                             Nd53    Nd51    Bc53    Bc55    Bd52    Kc54    Pd55    Pd44    Pe21    Pe    P*    Pc31    Pc41    Pc51    Sd43    Se1    Sc1    Sc42    Ad42    Ae2    Ac4
 		// 							   Ka52    If2    Ec2    Pf51    Pf41    Pe22    Pf    Pa33    Pa44    Pa55    Sf42    Sf1    Sa    Sb1    Sa43    Af43    Aa3    Aa42
 
-		match.White.Pieces = []string{"Kd5", "R*"}
-		match.Black.Pieces = []string{"Ka5", "Pa33", "Pa1", "Pf21", "Pf31"} // , "Bb32"
+		// match.White.Pieces = []string{"Kd5", "R*"}
+		// match.Black.Pieces = []string{"Ka5", "Pa33", "Pa1", "Pf21", "Pf31"} // , "Bb32"
 		//match.White.Pieces = []string{"Pd55", "Pd44", "Pd33"}
 		//match.Black.Pieces = []string{"Pf21"}
 		//match.Log = []string{"blank"} // to make this blacks move
-		match.Move("*~b5", true)
+		//match.Move("*~b5", true)
 		//match.Move("a33v", true)
 		// match.TestAttacks("f5")
 		// match.Show("f5")
@@ -49,9 +49,11 @@ func main() {
 		// 		fmt.Println("No move returned")
 		// 	}
 		// }
-		fmt.Println("move: " + match.LastMove)
-		match.Analyse()
-		match.Examine()
+		// fmt.Println("move: " + match.LastMove)
+		// match.Analyse()
+		// match.Examine()
+
+		match.WinLoseDraw("win", "timeout")
 		os.Exit(0)
 	}
 	r := mux.NewRouter()
@@ -79,6 +81,7 @@ func main() {
 	r.HandleFunc("/match/getMatches", match.Matches)
 	r.HandleFunc("/match/save", match.SaveMatch)
 	r.HandleFunc("/match/list", match.ListMatches)
+	r.HandleFunc("/match/live", match.LiveMatches)
 	r.HandleFunc("/match/load/{id}", match.LoadMatch)
 	r.HandleFunc("/match/move/{id}", match.MakeMove)
 	r.HandleFunc("/match/challenge", match.CreateMatch)

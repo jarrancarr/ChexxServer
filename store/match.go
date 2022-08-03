@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -1192,17 +1193,23 @@ func (match *Match) Examine() {
 }
 
 func (match *Match) WinLoseDraw(white, how string) {
+	if DEBUG {
+		log.Printf("WinLoseDraw...")
+	}
 	blackPlayer := GetUser(match.BlackPlayerId)
 	whitePlayer := GetUser(match.WhitePlayerId)
 	oldRank := blackPlayer.Rating(match.Game.Name)
+	if DEBUG {
+		log.Printf("rank:%s  oldRank=%d...", blackPlayer.Rank, oldRank)
+	}
 	points := 0
 	if white == "win" {
 		points = 200
 	} else if white == "lose" {
 		points = -200
 	}
-	blackPlayer.SetRating(match.Game.Name, (oldRank*24+whitePlayer.Rating(match.Game.Name)-uint16(points))/25)
-	whitePlayer.SetRating(match.Game.Name, (oldRank*24+blackPlayer.Rating(match.Game.Name)+uint16(points))/25)
+	blackPlayer.SetRating(match.Game.Name, (blackPlayer.Rating(match.Game.Name)*24+whitePlayer.Rating(match.Game.Name)-uint16(points))/25)
+	whitePlayer.SetRating(match.Game.Name, (whitePlayer.Rating(match.Game.Name)*24+oldRank+uint16(points))/25)
 	match.Game.Status = how
 	blackPlayer.Update()
 	whitePlayer.Update()

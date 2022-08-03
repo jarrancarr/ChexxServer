@@ -71,7 +71,7 @@ type Session struct {
 	Inbox  chan interface{}
 }
 
-var DEBUG = true
+var DEBUG = false
 
 var SessionMap map[string]*Session // map of tokens to sessions
 var OnlineMapping map[uint]string  // map of ids to tokens
